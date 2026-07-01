@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>MTProxy 管理面板</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+
+<!-- 全局 Loading -->
+<div id="global-loading" class="global-loading hidden">
+  <div class="spinner"></div>
+</div>
+
+<!-- Toast 容器 -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- 登录页 -->
+<div id="login-view" class="login-view">
+  <div class="login-bg"></div>
+  <div class="login-card fade-in">
+    <div class="login-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <h1>MTProxy Panel</h1>
+    <p>多用户密钥 · 流量管控 · Fake-TLS · 系统监控</p>
+    <div class="form-group">
+      <label>管理员账号</label>
+      <input type="text" id="login-user" placeholder="admin" value="admin" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" id="login-pass" placeholder="请输入密码" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary btn-block" id="btn-login" onclick="doLogin()">
+      <span>登 录</span>
+    </button>
+    <div id="login-error" class="error-msg hidden"></div>
+  </div>
+</div>
+
+<!-- 主应用 -->
+<div id="app-view" class="app-layout hidden">
+  <!-- 移动端遮罩 -->
+  <div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+
+  <!-- 侧边栏 -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      <span>MTProxy</span>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        系统看板
+      </button>
+      <button class="nav-item" data-tab="users" onclick="switchTab('users')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        用户管理
+      </button>
+      <button class="nav-item" data-tab="settings" onclick="switchTab('settings')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        代理设置
+      </button>
+      <button class="nav-item" data-tab="security" onclick="switchTab('security')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        安全设置
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <button class="nav-item danger" onclick="logout()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        退出登录
+      </button>
+    </div>
+  </aside>
+
+  <!-- 主内容 -->
+  <main class="main-content">
+    <header class="topbar">
+      <button class="hamburger" onclick="toggleSidebar(true)" aria-label="菜单">
+        <span></span><span></span><span></span>
+      </button>
+      <div class="topbar-title">
+        <h1 id="page-title">系统看板</h1>
+        <span id="refresh-hint" class="topbar-sub">自动刷新 15s</span>
+      </div>
+      <button class="btn btn-icon" id="theme-toggle" onclick="toggleTheme()" title="切换主题">
+        <svg id="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        <svg id="icon-sun" class="hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+      </button>
+      <button class="btn btn-icon" onclick="refreshDashboard()" title="刷新">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      </button>
+    </header>
+
+    <div class="content-area fade-in" id="content-area">
+
+      <!-- 系统看板 -->
+      <section id="tab-dashboard" class="panel-section active">
+        <div class="dashboard-grid" id="stats-grid"></div>
+        <div class="card">
+          <div class="card-header">
+            <h2>代理概览</h2>
+            <div id="proxy-status-badge"></div>
+          </div>
+          <div id="proxy-info" class="proxy-info"></div>
+        </div>
+      </section>
+
+      <!-- 用户管理 -->
+      <section id="tab-users" class="panel-section">
+        <div class="card">
+          <div class="card-header"><h2>添加用户密钥</h2></div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>备注名称</label>
+              <input type="text" id="new-remark" placeholder="如：张三、备用号">
+            </div>
+            <div class="form-group">
+              <label>流量配额 (GB)</label>
+              <input type="number" id="new-limit" placeholder="0 = 不限" min="0" step="0.1" value="0">
+            </div>
+            <div class="form-group">
+              <label>有效天数</label>
+              <input type="number" id="new-expires" placeholder="留空 = 永久" min="1">
+            </div>
+            <div class="form-group form-action">
+              <button class="btn btn-success btn-block" onclick="addUser()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                生成新密钥
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>用户列表</h2>
+            <span id="user-count" class="chip"></span>
+          </div>
+          <!-- 桌面端表格 -->
+          <div class="table-desktop">
+            <table>
+              <thead>
+                <tr>
+                  <th>用户</th>
+                  <th>状态</th>
+                  <th>流量</th>
+                  <th>到期</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody"></tbody>
+            </table>
+          </div>
+          <!-- 移动端卡片 -->
+          <div class="user-cards" id="users-cards"></div>
+        </div>
+      </section>
+
+      <!-- 代理设置 -->
+      <section id="tab-settings" class="panel-section">
+        <div class="card">
+          <div class="card-header"><h2>防封与混淆</h2></div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>伪装域名</label>
+              <input type="text" id="set-domain" placeholder="azure.microsoft.com">
+            </div>
+            <div class="form-group">
+              <label>Fake-TLS 模式</label>
+              <select id="set-tls-mode">
+                <option value="ee">ee — 域名混淆（推荐）</option>
+                <option value="dd">dd — 随机填充混淆</option>
+                <option value="off">关闭 — 经典模式</option>
+              </select>
+            </div>
+          </div>
+          <label class="check-label">
+            <input type="checkbox" id="set-skip-domain"> 跳过域名可达性检测
+          </label>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>端口与网络</h2></div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>代理端口</label>
+              <input type="number" id="set-proxy-port" min="1" max="65535">
+            </div>
+            <div class="form-group">
+              <label>面板端口</label>
+              <input type="number" id="set-panel-port" min="1024" max="65535">
+            </div>
+            <div class="form-group">
+              <label>公网 IP</label>
+              <input type="text" id="set-public-ip" placeholder="自动检测">
+            </div>
+            <div class="form-group">
+              <label>推广 TAG</label>
+              <input type="text" id="set-adtag" placeholder="32位，可留空">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="saveSettings()">保存并重启代理</button>
+          <div class="btn-group">
+            <button class="btn btn-ghost" onclick="proxyAction('restart')">重启代理</button>
+            <button class="btn btn-ghost" onclick="proxyAction('stop')">停止</button>
+            <button class="btn btn-ghost" onclick="proxyAction('start')">启动</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 安全设置 -->
+      <section id="tab-security" class="panel-section">
+        <div class="card">
+          <div class="card-header"><h2>管理员账号</h2></div>
+          <div class="form-group">
+            <label>新用户名</label>
+            <input type="text" id="sec-username" placeholder="至少 3 位">
+          </div>
+          <div class="form-group">
+            <label>新密码</label>
+            <input type="password" id="sec-password" placeholder="至少 6 位">
+          </div>
+          <button class="btn btn-primary" onclick="saveAdmin()">更新账号</button>
+          <p class="hint-text">修改后需重新登录，请勿使用默认密码。</p>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- 分享弹窗 -->
+<div id="modal-share" class="modal-overlay hidden" onclick="closeModal('modal-share', event)">
+  <div class="modal fade-in" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="modal-title">分享链接</h3>
+      <button class="btn btn-icon" onclick="closeModal('modal-share')">&times;</button>
+    </div>
+    <div class="qr-wrap"><img id="modal-qr" src="" alt="QR Code"></div>
+    <div class="link-box" id="modal-link"></div>
+    <button class="btn btn-primary btn-block" onclick="copyModalLink()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      复制 tg:// 链接
+    </button>
+  </div>
+</div>
+
+<!-- 编辑弹窗 -->
+<div id="modal-edit" class="modal-overlay hidden" onclick="closeModal('modal-edit', event)">
+  <div class="modal modal-wide fade-in" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="edit-title">编辑用户</h3>
+      <button class="btn btn-icon" onclick="closeModal('modal-edit')">&times;</button>
+    </div>
+    <input type="hidden" id="edit-id">
+    <div class="form-group">
+      <label>备注名称</label>
+      <input type="text" id="edit-remark">
+    </div>
+    <div class="form-group">
+      <label>流量配额 GB（0=不限）</label>
+      <input type="number" id="edit-limit" min="0" step="0.1">
+    </div>
+    <div class="form-group">
+      <label>延长有效期（天，0=永久）</label>
+      <input type="number" id="edit-expires" min="0">
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="saveEditUser()">保存</button>
+      <button class="btn btn-ghost" onclick="resetUserTraffic()">重置流量</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit')">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 确认弹窗 -->
+<div id="modal-confirm" class="modal-overlay hidden">
+  <div class="modal fade-in">
+    <div class="modal-header"><h3 id="confirm-title">确认操作</h3></div>
+    <p id="confirm-msg" class="confirm-msg"></p>
+    <div class="btn-group">
+      <button class="btn btn-danger" id="confirm-ok">确认</button>
+      <button class="btn btn-ghost" onclick="closeModal('modal-confirm')">取消</button>
+    </div>
+  </div>
+</div>
+
+<script src="static/app.js"></script>
+</body>
+</html>

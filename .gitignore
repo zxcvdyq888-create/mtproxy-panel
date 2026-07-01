@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+venv/
+data/
+proxy/bin/
+proxy/pid/
+*.db
+*.log
+.DS_Store
