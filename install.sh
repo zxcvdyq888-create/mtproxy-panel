@@ -248,11 +248,53 @@ EOF
 
 # ==================== 交互配置 ====================
 
+stdin_is_piped() {
+    [[ -p /dev/stdin ]] \
+        || [[ "${BASH_SOURCE[0]:-}" == /dev/fd/* ]] \
+        || [[ "${BASH_SOURCE[0]:-}" == /dev/stdin ]]
+}
+
+# curl | bash 时 stdin 是脚本内容，必须从终端读取
+read_tty() {
+    if [[ -r /dev/tty ]]; then
+        read "$@" </dev/tty || true
+    else
+        read "$@" || true
+    fi
+}
+
+pick_free_port() {
+    local port=$1 min=$2 max=$3
+    local try=0
+    while [ "$try" -lt 50 ]; do
+        is_port_free "$port" && { echo "$port"; return; }
+        port=$((port + 1))
+        [ "$port" -gt "$max" ] && port=$min
+        try=$((try + 1))
+    done
+    echo "$1"
+}
+
+do_default_config() {
+    PANEL_PORT=${MTP_PANEL_PORT:-$PANEL_PORT}
+    PROXY_PORT=${MTP_PROXY_PORT:-$PROXY_PORT}
+    FAKE_DOMAIN=${MTP_FAKE_DOMAIN:-$FAKE_DOMAIN}
+    FAKE_TLS_MODE=${MTP_FAKE_TLS_MODE:-$FAKE_TLS_MODE}
+
+    is_port_free "$PANEL_PORT" || PANEL_PORT=$(pick_free_port "$PANEL_PORT" 1024 65535)
+    is_port_free "$PROXY_PORT" || PROXY_PORT=$(pick_free_port "$PROXY_PORT" 1 65535)
+
+    print_info "使用默认配置（可在面板中修改）:"
+    print_info "  面板端口: ${PANEL_PORT}  代理端口: ${PROXY_PORT}"
+    print_info "  伪装域名: ${FAKE_DOMAIN}  混淆模式: ${FAKE_TLS_MODE}"
+}
+
 prompt_port() {
     local name=$1 default=$2 min=$3 max=$4
     while true; do
         print_subject "请输入${name} [${min}-${max}]"
-        read -p "(默认: ${default}):" input
+        local input=""
+        read_tty -p "(默认: ${default}):" input
         input=${input:-$default}
         if [[ "$input" =~ ^[0-9]+$ ]] && [ "$input" -ge "$min" ] && [ "$input" -le "$max" ]; then
             if is_port_free "$input"; then
@@ -266,12 +308,18 @@ prompt_port() {
 }
 
 do_interactive_config() {
+    if [[ "${MTP_NONINTERACTIVE:-}" == "1" ]] || stdin_is_piped; then
+        do_default_config
+        return
+    fi
+
     PANEL_PORT=$(prompt_port "面板访问端口" "$PANEL_PORT" 1024 65535)
     PROXY_PORT=$(prompt_port "MTProxy 代理端口" "$PROXY_PORT" 1 65535)
 
     while true; do
         print_subject "请输入伪装域名（Fake-TLS 用）"
-        read -p "(默认: ${FAKE_DOMAIN}):" input
+        local input=""
+        read_tty -p "(默认: ${FAKE_DOMAIN}):" input
         input=${input:-$FAKE_DOMAIN}
         http_code=$(curl -I -m 8 -o /dev/null -s -w "%{http_code}" "https://${input}" 2>/dev/null || echo "000")
         if [[ "$http_code" =~ ^(200|301|302|403)$ ]]; then
@@ -284,7 +332,8 @@ do_interactive_config() {
     echo -e "  \033[36m1.\033[0m ee — 标准 Fake-TLS（域名混淆，推荐）"
     echo -e "  \033[36m2.\033[0m dd — 随机填充 Fake-TLS"
     echo -e "  \033[36m3.\033[0m 关闭 — 经典模式（无混淆）"
-    read -p "(默认: 1):" tls_choice
+    local tls_choice=""
+    read_tty -p "(默认: 1):" tls_choice
     case "${tls_choice:-1}" in
         2) FAKE_TLS_MODE="dd" ;;
         3) FAKE_TLS_MODE="off" ;;
@@ -472,7 +521,7 @@ do_install() {
 }
 
 do_reset() {
-    read -p "确认重置？将清空所有用户数据，保留代理配置，管理员恢复为 admin/admin123 (y/N): " c
+    local c=""; read_tty -p "确认重置？将清空所有用户数据，保留代理配置，管理员恢复为 admin/admin123 (y/N): " c
     [[ "$c" == "y" || "$c" == "Y" ]] || exit 0
 
     print_info "停止服务..."
@@ -510,14 +559,14 @@ PY
 }
 
 do_uninstall() {
-    read -p "确认卸载 MTProxy 管理面板？(y/N): " c
+    local c=""; read_tty -p "确认卸载 MTProxy 管理面板？(y/N): " c
     [[ "$c" == "y" || "$c" == "Y" ]] || exit 0
     stop_panel
     stop_proxy
     systemctl disable "${SERVICE_NAME}.service" 2>/dev/null || true
     rm -f "/etc/systemd/system/${SERVICE_NAME}.service"
     systemctl daemon-reload
-    read -p "是否删除数据目录 ${INSTALL_DIR}？(y/N): " d
+    local d=""; read_tty -p "是否删除数据目录 ${INSTALL_DIR}？(y/N): " d
     [[ "$d" == "y" || "$d" == "Y" ]] && rm -rf "$INSTALL_DIR" /var/log/mtproxy-panel
     print_info "卸载完成"
 }
