@@ -22,7 +22,7 @@ FAKE_DOMAIN="azure.microsoft.com"
 FAKE_TLS_MODE="ee"
 
 # GitHub 仓库（格式: 用户名/仓库名）— 推送到 GitHub 后改成你的
-DEFAULT_GITHUB_REPO="YOUR_USERNAME/mtproxy-panel"
+DEFAULT_GITHUB_REPO="zxcvdyq888-create/mtproxy-panel"
 MTP_GITHUB_REPO="${MTP_GITHUB_REPO:-$DEFAULT_GITHUB_REPO}"
 
 github_owner() { echo "${MTP_GITHUB_REPO%%/*}"; }
