@@ -18,8 +18,15 @@ SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo
 PUBLIC_IP=""
 PANEL_PORT=8088
 PROXY_PORT=34286
-FAKE_DOMAIN="azure.microsoft.com"
+FAKE_DOMAIN="www.google.com"
 FAKE_TLS_MODE="ee"
+FAKE_DOMAIN_CANDIDATES=(
+    "www.google.com"
+    "www.microsoft.com"
+    "www.cloudflare.com"
+    "azure.microsoft.com"
+    "www.apple.com"
+)
 
 # GitHub 仓库（格式: 用户名/仓库名）— 推送到 GitHub 后改成你的
 DEFAULT_GITHUB_REPO="zxcvdyq888-create/mtproxy-panel"
@@ -275,15 +282,38 @@ pick_free_port() {
     echo "$1"
 }
 
+check_fake_domain() {
+    local domain=$1
+    local http_code
+    http_code=$(curl -I -m 10 -o /dev/null -s -w "%{http_code}" "https://${domain}" 2>/dev/null || echo "000")
+    # Fake-TLS 只需 HTTPS 可达；404/403 等页面状态完全正常
+    [[ "$http_code" != "000" && "$http_code" =~ ^[0-9]{3}$ ]] && return 0
+    if command -v openssl &>/dev/null; then
+        echo | timeout 8 openssl s_client -connect "${domain}:443" -servername "$domain" </dev/null 2>/dev/null \
+            | grep -qE 'CONNECTED|Protocol' && return 0
+    fi
+    return 1
+}
+
+pick_fake_domain() {
+    local preferred=${1:-}
+    [[ -n "$preferred" ]] && check_fake_domain "$preferred" && { echo "$preferred"; return; }
+    local d
+    for d in "${FAKE_DOMAIN_CANDIDATES[@]}"; do
+        check_fake_domain "$d" && { echo "$d"; return; }
+    done
+    echo "${preferred:-www.google.com}"
+}
+
 do_default_config() {
     PANEL_PORT=${MTP_PANEL_PORT:-$PANEL_PORT}
     PROXY_PORT=${MTP_PROXY_PORT:-$PROXY_PORT}
-    FAKE_DOMAIN=${MTP_FAKE_DOMAIN:-$FAKE_DOMAIN}
     FAKE_TLS_MODE=${MTP_FAKE_TLS_MODE:-$FAKE_TLS_MODE}
 
     is_port_free "$PANEL_PORT" || PANEL_PORT=$(pick_free_port "$PANEL_PORT" 1024 65535)
     is_port_free "$PROXY_PORT" || PROXY_PORT=$(pick_free_port "$PROXY_PORT" 1 65535)
 
+    FAKE_DOMAIN=$(pick_fake_domain "${MTP_FAKE_DOMAIN:-$FAKE_DOMAIN}")
     print_info "使用默认配置（可在面板中修改）:"
     print_info "  面板端口: ${PANEL_PORT}  代理端口: ${PROXY_PORT}"
     print_info "  伪装域名: ${FAKE_DOMAIN}  混淆模式: ${FAKE_TLS_MODE}"
@@ -316,16 +346,23 @@ do_interactive_config() {
     PANEL_PORT=$(prompt_port "面板访问端口" "$PANEL_PORT" 1024 65535)
     PROXY_PORT=$(prompt_port "MTProxy 代理端口" "$PROXY_PORT" 1 65535)
 
+    FAKE_DOMAIN=$(pick_fake_domain "$FAKE_DOMAIN")
     while true; do
-        print_subject "请输入伪装域名（Fake-TLS 用）"
-        local input=""
+        print_subject "请输入伪装域名（Fake-TLS 用，404 页面也可用）"
+        local input="" force=""
         read_tty -p "(默认: ${FAKE_DOMAIN}):" input
         input=${input:-$FAKE_DOMAIN}
-        http_code=$(curl -I -m 8 -o /dev/null -s -w "%{http_code}" "https://${input}" 2>/dev/null || echo "000")
-        if [[ "$http_code" =~ ^(200|301|302|403)$ ]]; then
+        if check_fake_domain "$input"; then
             FAKE_DOMAIN=$input; break
         fi
-        print_warning "域名 https://${input} 不可达 (HTTP ${http_code})，请更换"
+        print_warning "域名 https://${input} HTTPS 检测失败"
+        read_tty -p "仍要使用 ${input}？(y/N):" force
+        if [[ "$(echo "$force" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+            FAKE_DOMAIN=$input; break
+        fi
+        print_info "将自动尝试其他常用域名..."
+        FAKE_DOMAIN=$(pick_fake_domain "")
+        print_info "已切换为: ${FAKE_DOMAIN}"
     done
 
     print_subject "选择 Fake-TLS 混淆模式"
