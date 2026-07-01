@@ -1,11 +1,17 @@
 # MTProxy 管理面板
 
-多用户密钥、流量配额、Fake-TLS、二维码分享、系统监控 — 一键安装 Web 管理面板。
+多用户密钥、流量配额、Fake-TLS、二维码分享、系统监控 — Web 管理面板 + 一键安装。
 
-## 一键安装（任意服务器，root 执行）
+## 一键安装
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zxcvdyq888-create/mtproxy-panel/main/install.sh | bash
+```
+
+或使用官方发布地址（推荐，始终最新）：
+
+```bash
+curl -fsSL https://Hkt.237700.xyz/mtproxy-release/install.sh | bash
 ```
 
 安装完成后：
@@ -14,7 +20,8 @@ curl -fsSL https://raw.githubusercontent.com/zxcvdyq888-create/mtproxy-panel/mai
 mtproxy-panel status
 ```
 
-默认面板：`http://服务器IP:8088`，账号 `admin` / `admin123`（登录后请立即改密）。
+- 面板地址：`http://服务器IP:8088`
+- 默认账号：`admin` / `admin123`（请登录后立即修改）
 
 ## 管理命令
 
@@ -26,27 +33,27 @@ mtproxy-panel status     # 状态
 mtproxy-panel uninstall  # 卸载
 ```
 
-## 发布到 GitHub（维护者）
+## 功能
 
-1. 推送代码到 GitHub
-3. 打标签触发 Release（可选，加速下载）：
+- 多用户密钥管理（添加 / 删除 / 禁用 / 备注）
+- 流量配额 + 到期自动失效
+- Fake-TLS 混淆（ee / dd / 关闭）
+- tg:// 链接 + 二维码分享
+- 系统监控（CPU / 内存 / 硬盘）
+- 管理员改密、面板端口配置
 
-```bash
-git tag v1.0.0 && git push origin v1.0.0
-```
-
-或在 GitHub 网页 **Actions → Release → Run workflow** 手动发布。
-
-## 自定义下载源
+## 维护者：推送到 GitHub
 
 ```bash
-export MTP_GITHUB_REPO=zxcvdyq888-create/mtproxy-panel
-curl -fsSL https://raw.githubusercontent.com/zxcvdyq888-create/mtproxy-panel/main/install.sh | bash
+export GITHUB_TOKEN=ghp_你的Token
+bash scripts/publish-github.sh
+bash scripts/github-release.sh v1.0.1
+unset GITHUB_TOKEN
 ```
 
-或使用自建服务器：
+详细图文教程见服务器文件：`/root/GitHub项目发布完整教程.md`
 
-```bash
-export MTP_RELEASE_URL=https://你的域名/mtproxy-release
-curl -fsSL https://你的域名/mtproxy-release/install.sh | bash
-```
+## 仓库信息
+
+- GitHub: https://github.com/zxcvdyq888-create/mtproxy-panel
+- 安装目录: `/opt/mtproxy-panel`
