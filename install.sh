@@ -7,7 +7,12 @@
 
 set -euo pipefail
 export LANG=en_US.UTF-8
-export LC_ALL=C
+export LC_ALL=en_US.UTF-8
+
+# curl | bash 时 stdin 是脚本管道，强制非交互安装
+if [[ -p /dev/stdin ]]; then
+    export MTP_NONINTERACTIVE=1
+fi
 
 INSTALL_DIR="/opt/mtproxy-panel"
 PANEL_DIR="$INSTALL_DIR/panel"
@@ -111,12 +116,15 @@ ensure_panel_files() {
     print_info "安装包下载完成"
 }
 
-# curl | bash 时重新执行本地完整脚本
+# curl | bash 时重新执行本地完整脚本（非交互）
 reexec_local_if_needed() {
     [[ -f "$INSTALL_DIR/install.sh" ]] || return 0
     local invoked="${BASH_SOURCE[0]:-}"
-    [[ "$invoked" == "$INSTALL_DIR/install.sh" ]] && return 0
-    [[ -p "$invoked" || "$invoked" == "/dev/fd/"* || "$invoked" == "/dev/stdin" ]] || return 0
+    local local_script
+    local_script="$(readlink -f "$INSTALL_DIR/install.sh" 2>/dev/null || echo "$INSTALL_DIR/install.sh")"
+    [[ "$(readlink -f "$invoked" 2>/dev/null || echo "$invoked")" == "$local_script" ]] && return 0
+    stdin_is_piped || [[ "${MTP_NONINTERACTIVE:-}" == "1" ]] || return 0
+    export MTP_NONINTERACTIVE=1
     print_info "切换到本地安装脚本: $INSTALL_DIR/install.sh"
     exec bash "$INSTALL_DIR/install.sh" "${@:-install}"
 }
@@ -530,6 +538,7 @@ show_result() {
 
 do_install() {
     ensure_panel_files
+    stdin_is_piped && export MTP_NONINTERACTIVE=1
     PUBLIC_IP=$(get_ip_public)
     print_line
     echo "MTProxy 管理面板 · 一键安装 v2.0"
@@ -625,6 +634,16 @@ fi
 
 reexec_local_if_needed "${param:-install}"
 ensure_panel_files 2>/dev/null || true
+
+# 下载完安装包后，管道安装一律走本地脚本 + 非交互
+if [[ -f "$INSTALL_DIR/install.sh" ]] && { stdin_is_piped || [[ "${MTP_NONINTERACTIVE:-}" == "1" ]]; }; then
+    case "${param:-install}" in
+        install|reinstall)
+            export MTP_NONINTERACTIVE=1
+            exec bash "$INSTALL_DIR/install.sh" "${param:-install}"
+            ;;
+    esac
+fi
 
 case "$param" in
     start)
