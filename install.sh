@@ -40,26 +40,12 @@ MTP_GITHUB_REPO="${MTP_GITHUB_REPO:-$DEFAULT_GITHUB_REPO}"
 github_owner() { echo "${MTP_GITHUB_REPO%%/*}"; }
 github_repo()  { echo "${MTP_GITHUB_REPO##*/}"; }
 
-# 安装包下载地址（优先 GitHub Release，可用 MTP_RELEASE_URL 覆盖为自建服务器）
-resolve_release_base() {
-    if [[ -n "${MTP_RELEASE_URL:-}" ]]; then
-        echo "$MTP_RELEASE_URL"
-    elif [[ "${MTP_GITHUB_REPO}" != "YOUR_USERNAME/mtproxy-panel" ]]; then
-        echo "https://github.com/${MTP_GITHUB_REPO}/releases/latest/download"
-    else
-        echo "https://Hkt.237700.xyz/mtproxy-release"
-    fi
-}
-RELEASE_BASE="$(resolve_release_base)"
+# 官方发布地址（最新版，GitHub 仅作备用源码仓库）
+DEFAULT_RELEASE_URL="https://Hkt.237700.xyz/mtproxy-release"
+RELEASE_BASE="${MTP_RELEASE_URL:-$DEFAULT_RELEASE_URL}"
 
 install_cmd_hint() {
-    local owner repo
-    owner=$(github_owner); repo=$(github_repo)
-    if [[ "${MTP_GITHUB_REPO}" != "YOUR_USERNAME/mtproxy-panel" ]]; then
-        echo "curl -fsSL https://raw.githubusercontent.com/${owner}/${repo}/main/install.sh | bash"
-    else
-        echo "curl -fsSL ${RELEASE_BASE}/install.sh | bash"
-    fi
+    echo "curl -fsSL ${RELEASE_BASE}/install.sh | bash"
 }
 
 # ==================== 远程安装包 ====================
