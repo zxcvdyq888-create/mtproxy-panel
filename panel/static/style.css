@@ -1324,3 +1324,10 @@ input:focus, select:focus {
   font-weight: 400;
 }
 .node-ports { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+.nav-section-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 700;
+  padding: 14px 16px 6px;
+  letter-spacing: 0.05em;
+}
