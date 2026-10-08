@@ -4,7 +4,29 @@
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/Version-2.1-green.svg)](CHANGELOG.md)
 
+> 发布日期：2026-10-08　|　当前版本：v2.1
+
 Telegram MTProto 代理的多用户 Web 管理面板：用户密钥管理、流量配额、到期自动失效、Fake-TLS 混淆、二维码分享、系统监控，一键脚本完成安装。
+
+## v2.1 更新内容（2026-10-08）
+
+- **更安全**：全新安装生成 16 位随机管理员密码（不再是默认的 admin/admin123）；登录防暴力破解（60 秒 5 次失败自动限流）；JWT 密钥自动生成
+- **更快**：添加用户从原来卡 3 秒变成 0.1 秒返回；流量统计、IP 查询加缓存
+- **更稳定**：修复 5 个 bug——无推广 TAG 时代理启动崩溃、重启时双进程抢端口、并发操作导致 500 错误、IPv6 链接格式错误、数据库并发写锁死
+- **纯 IPv4**：IP 获取、链接生成全部只走 IPv4
+- **一键安装**：`install.sh` 全自动装完，Debian 11 旧机器也能装
+
+详细清单见 [CHANGELOG.md](CHANGELOG.md)。
+
+## 界面预览
+
+| 登录 | 仪表盘 |
+|---|---|
+| ![登录](docs/preview/01-login.png) | ![仪表盘](docs/preview/02-dashboard.png) |
+
+| 用户管理 | 代理设置 |
+|---|---|
+| ![用户管理](docs/preview/03-users.png) | ![代理设置](docs/preview/04-settings.png) |
 
 ## 功能特性
 
@@ -71,7 +93,7 @@ Telegram 客户端 ──► 代理 :443 ─────────────
 - **前端**：原生 HTML / CSS / JS 单页应用（`panel/static/`），无框架依赖
 - **后台任务**：每 15 秒统计流量、清理过期用户；用户变更后代理在后台重启，接口即时返回
 
-API 接口见 [CHANGELOG](CHANGELOG.md) 版本记录；共 15 个 REST 接口，均需 `Authorization: Bearer <token>`（登录接口除外）。
+共 15 个 REST 接口，均需 `Authorization: Bearer <token>`（登录接口除外）。
 
 ## 常见问题
 
@@ -86,13 +108,6 @@ A: 统计线程每 15 秒跑一次，稍等；确认代理正在运行。
 
 **Q: 如何备份？**
 A: 备份 `/opt/mtproxy-panel/data/panel.db` 即可（含全部用户与配置）。
-
-## 维护者
-
-```bash
-GITHUB_TOKEN=ghp_xxx bash scripts/publish-github.sh          # 推送代码
-GITHUB_TOKEN=ghp_xxx bash scripts/github-release.sh v2.1.0  # 发 Release
-```
 
 ## 开源协议
 
