@@ -1,14 +1,14 @@
-# MTProxy 管理面板
+# 闪电内部TG代理管理面板
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/Version-2.1-green.svg)](CHANGELOG.md)
 
-> 发布日期：2026-10-08　|　当前版本：v2.1
+> 发布日期：2026-10-08　|　当前版本：v2.3
 
 Telegram MTProto 代理的多用户 Web 管理面板：用户密钥管理、流量配额、到期自动失效、Fake-TLS 混淆、二维码分享、系统监控，一键脚本完成安装。
 
-## v2.1 更新内容（2026-10-08）
+## v2.3 更新内容（2026-10-08）
 
 - **更安全**：全新安装生成 16 位随机管理员密码（不再是默认的 admin/admin123）；登录防暴力破解（60 秒 5 次失败自动限流）；JWT 密钥自动生成
 - **更快**：添加用户从原来卡 3 秒变成 0.1 秒返回；流量统计、IP 查询加缓存
@@ -45,6 +45,7 @@ Telegram MTProto 代理的多用户 Web 管理面板：用户密钥管理、流�
 | 系统监控 | CPU / 内存 / 硬盘实时状态 |
 | 面板管理 | 端口修改、管理员改密、明暗主题 |
 | 多服务器 | 一键添加服务器，用户密钥自动同步，在线状态与资源监控 |
+| SOCKS5 | 通用 SOCKS5 代理，每用户独立账号密码，流量计入统计 |
 
 ## 多服务器管理
 

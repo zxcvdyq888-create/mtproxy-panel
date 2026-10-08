@@ -24,17 +24,32 @@ PANEL_URL=""
 INSTALL_TOKEN=""
 NODE_NAME=""
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --panel) PANEL_URL="$2"; shift 2 ;;
-    --token) INSTALL_TOKEN="$2"; shift 2 ;;
-    --name) NODE_NAME="$2"; shift 2 ;;
-    *) echo "未知参数: $1"; exit 1 ;;
-  esac
-done
+# 支持两种写法：
+#   bash install-node.sh <面板地址> <安装令牌> [节点名称]
+#   bash install-node.sh --panel <面板地址> --token <安装令牌> [--name 名称]
+if [[ "${1:-}" != "" && "${1:-}" != --* ]]; then
+  PANEL_URL="$1"; INSTALL_TOKEN="${2:-}"; NODE_NAME="${3:-}"
+else
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --panel) PANEL_URL="$2"; shift 2 ;;
+      --token) INSTALL_TOKEN="$2"; shift 2 ;;
+      --name) NODE_NAME="$2"; shift 2 ;;
+      *) echo "未知参数: $1"; exit 1 ;;
+    esac
+  done
+fi
+
+# 缺参数则交互式输入
+if [[ -z "$PANEL_URL" ]]; then
+  read -rp "主面板地址 (如 http://1.2.3.4:8088): " PANEL_URL
+fi
+if [[ -z "$INSTALL_TOKEN" ]]; then
+  read -rp "安装令牌 (面板「服务器」页面获取): " INSTALL_TOKEN
+fi
 
 if [[ -z "$PANEL_URL" || -z "$INSTALL_TOKEN" ]]; then
-  echo "用法: bash install-node.sh --panel http://主面板IP:8088 --token <安装令牌> [--name 节点名称]"
+  echo "用法: curl -fsSL .../install-node.sh | bash -s -- <面板地址> <安装令牌> [节点名称]"
   exit 1
 fi
 

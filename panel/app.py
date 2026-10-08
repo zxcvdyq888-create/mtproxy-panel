@@ -4,11 +4,13 @@ import os
 import re
 import secrets
 import subprocess
+import sys
 import threading
 import time
 import logging
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import jwt
@@ -46,6 +48,54 @@ security = HTTPBearer(auto_error=False)
 _stats_thread: Optional[threading.Thread] = None
 _stats_stop = threading.Event()
 _proxy_needs_restart = False
+
+# SOCKS5 进程管理
+_socks5_proc: Optional[subprocess.Popen] = None
+_socks5_lock = threading.Lock()
+
+
+def _socks5_env() -> Dict[str, str]:
+    env = os.environ.copy()
+    env["SOCKS5_PORT"] = db.get_setting("socks5_port", "1080")
+    # 让子进程找到 panel 目录（database.py）
+    panel_dir = str(Path(__file__).parent)
+    env["PYTHONPATH"] = panel_dir + os.pathsep + env.get("PYTHONPATH", "")
+    return env
+
+
+def is_socks5_running() -> bool:
+    with _socks5_lock:
+        return _socks5_proc is not None and _socks5_proc.poll() is None
+
+
+def start_socks5() -> bool:
+    with _socks5_lock:
+        global _socks5_proc
+        if _socks5_proc is not None and _socks5_proc.poll() is None:
+            return True
+        panel_dir = Path(__file__).parent
+        _socks5_proc = subprocess.Popen(
+            [sys.executable, str(panel_dir / "socks5_service.py")],
+            env=_socks5_env(),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+
+
+def stop_socks5() -> None:
+    with _socks5_lock:
+        global _socks5_proc
+        if _socks5_proc is not None:
+            try:
+                _socks5_proc.terminate()
+                _socks5_proc.wait(timeout=5)
+            except Exception:
+                try:
+                    _socks5_proc.kill()
+                except Exception:
+                    pass
+            _socks5_proc = None
 
 _jwt_secret: Optional[str] = None
 
@@ -141,6 +191,12 @@ class NodeRegisterRequest(BaseModel):
     public_ip: str = ""
 
 
+class NodeUpdateRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    proxy_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    domain: Optional[str] = None
+
+
 def create_token(username: str) -> str:
     payload = {"sub": username, "exp": datetime.now(timezone.utc) + timedelta(days=7)}
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGO)
@@ -230,6 +286,8 @@ def user_to_response(
         "last_seen": user.get("last_seen"),
         "tg_link": tg_link,
         "http_link": http_link,
+        "socks_user": f"user{user['id']}",
+        "socks_pass": user.get("socks_password") or "",
     }
 
 
@@ -274,6 +332,9 @@ def on_startup() -> None:
     # 节点状态轮询
     _node_thread = threading.Thread(target=_node_poller_loop, daemon=True)
     _node_thread.start()
+    # SOCKS5 自启
+    if db.get_setting("socks5_enabled", "0") == "1":
+        start_socks5()
 
 
 @app.on_event("shutdown")
@@ -494,6 +555,43 @@ def proxy_stop(_: str = Depends(verify_token)) -> Dict[str, Any]:
     return {"running": False}
 
 
+# ============ SOCKS5 代理 ============
+
+@app.get("/api/socks5/status")
+def socks5_status(_: str = Depends(verify_token)) -> Dict[str, Any]:
+    return {
+        "running": is_socks5_running(),
+        "enabled": db.get_setting("socks5_enabled", "0") == "1",
+        "port": int(db.get_setting("socks5_port", "1080")),
+    }
+
+
+@app.post("/api/socks5/start")
+def socks5_start(_: str = Depends(verify_token)) -> Dict[str, Any]:
+    db.set_setting("socks5_enabled", "1")
+    return {"running": start_socks5()}
+
+
+@app.post("/api/socks5/stop")
+def socks5_stop(_: str = Depends(verify_token)) -> Dict[str, Any]:
+    db.set_setting("socks5_enabled", "0")
+    stop_socks5()
+    return {"running": False}
+
+
+@app.put("/api/socks5/port")
+def socks5_set_port(body: Dict[str, int], _: str = Depends(verify_token)) -> Dict[str, Any]:
+    port = body.get("port", 1080)
+    if not 1 <= port <= 65535:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "端口范围 1-65535")
+    db.set_setting("socks5_port", str(port))
+    # 重启生效
+    if is_socks5_running():
+        stop_socks5()
+        start_socks5()
+    return {"status": "ok", "port": port}
+
+
 # ============ 多服务器节点管理 ============
 
 import json as _json
@@ -556,9 +654,10 @@ def _sync_all_nodes_async() -> None:
 @app.get("/api/nodes")
 def get_nodes(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
     nodes = db.list_nodes()
-    # 隐藏 api_token，只返回掩码
+    # 隐藏 api_token，只返回掩码；附带域名
     for n in nodes:
         n["api_token"] = "***" if n.get("api_token") else ""
+        n["domain"] = db.get_node_domain(n["id"])
     return nodes
 
 
@@ -587,6 +686,28 @@ def remove_node(node_id: int, _: str = Depends(verify_token)) -> Dict[str, str]:
     return {"status": "ok"}
 
 
+@app.put("/api/nodes/{node_id}")
+def update_node(node_id: int, body: NodeUpdateRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    node = db.get_node(node_id)
+    if not node:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "节点不存在")
+    fields = {k: v for k, v in body.dict().items() if v is not None}
+    if not fields:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "没有要更新的字段")
+    node = db.update_node(node_id, **fields)
+    # 推送配置到节点 agent（端口/域名变更自动重启代理）
+    cfg_push = {}
+    if "proxy_port" in fields:
+        cfg_push["proxy_port"] = fields["proxy_port"]
+    if "domain" in fields:
+        cfg_push["domain"] = fields["domain"]
+    if cfg_push and node["status"] == "online":
+        _node_api_call(node, "/config", "POST", cfg_push)
+    node["api_token"] = "***"
+    node["domain"] = db.get_node_domain(node_id)
+    return node
+
+
 @app.get("/api/nodes/install-command")
 def get_install_command(request: Request, _: str = Depends(verify_token)) -> Dict[str, str]:
     """生成一键安装命令。"""
@@ -602,7 +723,7 @@ def get_install_command(request: Request, _: str = Depends(verify_token)) -> Dic
     cmd = (
         f"curl -fsSL https://raw.githubusercontent.com/"
         f"zxcvdyq888-create/mtproxy-panel/main/install-node.sh "
-        f"| bash -s -- --panel {panel_url} --token {token}"
+        f"| bash -s -- {panel_url} {token}"
     )
     return {"command": cmd, "panel_url": panel_url}
 

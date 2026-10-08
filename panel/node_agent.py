@@ -67,6 +67,12 @@ class SyncUsersRequest(BaseModel):
     users: List[Dict[str, Any]]
 
 
+class NodeConfigRequest(BaseModel):
+    proxy_port: int | None = None
+    domain: str | None = None
+    fake_tls_mode: str | None = None
+
+
 def _write_proxy_config(users: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Path:
     """根据同步的用户列表写 mtprotoproxy 配置。"""
     from mtproxy_service import BIN_DIR
@@ -133,6 +139,23 @@ def sync_users(body: SyncUsersRequest, _: str = Depends(verify_node_token)) -> D
 @app.post("/proxy/start")
 def proxy_start(_: str = Depends(verify_node_token)) -> Dict[str, Any]:
     return {"running": start_proxy()}
+
+
+@app.post("/config")
+def update_config(body: NodeConfigRequest, _: str = Depends(verify_node_token)) -> Dict[str, str]:
+    """更新节点配置（代理端口/伪装域名），自动重启代理生效。"""
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    cfg = _load_config()
+    if body.proxy_port is not None:
+        cfg["proxy_port"] = body.proxy_port
+    if body.domain is not None:
+        cfg["domain"] = body.domain
+    if body.fake_tls_mode is not None:
+        cfg["fake_tls_mode"] = body.fake_tls_mode
+    CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False))
+    _write_proxy_config(_load_users(), cfg)
+    restart_proxy()
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":

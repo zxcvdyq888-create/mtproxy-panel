@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>MTProxy 管理面板</title>
+  <title>闪电内部TG代理管理面板</title>
   <link rel="icon" type="image/svg+xml" href="static/favicon.svg">
   <link rel="stylesheet" href="static/style.css">
 </head>
@@ -24,7 +24,7 @@
     <div class="login-logo">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.9 4.6 2.7 12.2c-.8.3-.8 1.4.1 1.6l4.8 1.3 1.9 5.9c.3.8 1.3.9 1.8.2l2.7-3.8 5.6 4.1c.6.5 1.6.1 1.8-.7l3.4-14.5c.2-.9-.6-1.8-1.5-1.7z"/></svg>
     </div>
-    <h1>MTProxy Panel</h1>
+    <h1>闪电内部</h1>
     <p>多用户密钥 · 流量管控 · Fake-TLS · 系统监控</p>
     <div class="form-group">
       <label>管理员账号</label>
@@ -50,7 +50,7 @@
   <aside id="sidebar" class="sidebar">
     <div class="sidebar-brand">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.9 4.6 2.7 12.2c-.8.3-.8 1.4.1 1.6l4.8 1.3 1.9 5.9c.3.8 1.3.9 1.8.2l2.7-3.8 5.6 4.1c.6.5 1.6.1 1.8-.7l3.4-14.5c.2-.9-.6-1.8-1.5-1.7z"/></svg>
-      <span>MTProxy</span>
+      <span>闪电内部</span>
     </div>
     <nav class="sidebar-nav">
       <button class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
@@ -79,7 +79,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
         退出登录
       </button>
-      <div class="version-tag">v2.2</div>
+      <div class="version-tag">v2.3</div>
     </div>
   </aside>
 
@@ -106,6 +106,16 @@
 
       <!-- 系统看板 -->
       <section id="tab-dashboard" class="panel-section active">
+        <div class="hero-banner">
+          <div class="hero-content">
+            <div class="hero-title">闪电内部 TG 代理</div>
+            <div class="hero-subtitle">多服务器统一管理 · 一键分享 · 实时监控</div>
+          </div>
+          <div class="hero-actions">
+            <button class="btn btn-primary btn-sm" onclick="switchTab('users')">+ 添加用户</button>
+            <button class="btn btn-ghost btn-sm" onclick="switchTab('nodes')">管理服务器</button>
+          </div>
+        </div>
         <div class="dashboard-grid" id="stats-grid"></div>
         <div class="card">
           <div class="card-header">
@@ -221,6 +231,25 @@
             <button class="btn btn-ghost" onclick="proxyAction('start')">启动</button>
           </div>
         </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>SOCKS5 代理</h2>
+            <div id="socks5-badge"></div>
+          </div>
+          <p class="hint-text" style="margin-bottom:14px">为 Telegram / 其他应用提供通用 SOCKS5 代理，每个用户独立账号密码，流量计入用户统计。</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>SOCKS5 端口</label>
+              <input type="number" id="set-socks5-port" min="1" max="65535" placeholder="1080">
+            </div>
+          </div>
+          <div class="btn-group">
+            <button class="btn btn-primary" onclick="socks5SavePort()">保存端口</button>
+            <button class="btn btn-ghost" onclick="socks5Action('start')">启动</button>
+            <button class="btn btn-ghost" onclick="socks5Action('stop')">停止</button>
+          </div>
+        </div>
       </section>
 
       <!-- 安全设置 -->
@@ -274,6 +303,31 @@
   </div>
 </div>
 
+<!-- 编辑服务器弹窗 -->
+<div id="modal-edit-node" class="modal-overlay hidden" onclick="closeModal('modal-edit-node', event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>编辑服务器</h3>
+      <button class="btn btn-icon" onclick="closeModal('modal-edit-node')">&times;</button>
+    </div>
+    <input type="hidden" id="edit-node-id">
+    <div class="form-group">
+      <label>名称</label>
+      <input type="text" id="edit-node-name" placeholder="如：美国节点">
+    </div>
+    <div class="form-group">
+      <label>代理端口</label>
+      <input type="number" id="edit-node-port" min="1" max="65535" placeholder="443">
+      <p class="hint-text">修改后节点代理自动重启，记得放行对应端口</p>
+    </div>
+    <div class="form-group">
+      <label>伪装域名（Fake-TLS）</label>
+      <input type="text" id="edit-node-domain" placeholder="如：azure.microsoft.com">
+    </div>
+    <button class="btn btn-primary" onclick="saveNodeEdit()">保存</button>
+  </div>
+</div>
+
 <!-- 分享弹窗 -->
 <div id="modal-share" class="modal-overlay hidden" onclick="closeModal('modal-share', event)">
   <div class="modal fade-in" onclick="event.stopPropagation()">
@@ -287,6 +341,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
       复制 tg:// 链接
     </button>
+    <div class="socks-info" id="modal-socks"></div>
   </div>
 </div>
 

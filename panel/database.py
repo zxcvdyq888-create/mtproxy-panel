@@ -38,7 +38,8 @@ def init_db() -> None:
                 download_bytes INTEGER NOT NULL DEFAULT 0,
                 expires_at TEXT,
                 created_at TEXT NOT NULL,
-                last_seen TEXT
+                last_seen TEXT,
+                socks_password TEXT NOT NULL DEFAULT ''
             );
 
             CREATE INDEX IF NOT EXISTS idx_proxy_users_enabled ON proxy_users(enabled);
@@ -66,6 +67,17 @@ def init_db() -> None:
             conn.execute("ALTER TABLE proxy_users ADD COLUMN last_seen TEXT")
         except sqlite3.OperationalError:
             pass  # 列已存在
+        # 存量库迁移：补 socks_password 列
+        try:
+            conn.execute("ALTER TABLE proxy_users ADD COLUMN socks_password TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass  # 列已存在
+        # 给没有 socks_password 的老用户生成
+        for row in conn.execute("SELECT id FROM proxy_users WHERE socks_password = ''").fetchall():
+            conn.execute(
+                "UPDATE proxy_users SET socks_password = ? WHERE id = ?",
+                (secrets.token_urlsafe(12), row["id"]),
+            )
 
         defaults = {
             "panel_port": "8088",
@@ -78,6 +90,8 @@ def init_db() -> None:
             "adtag": "",
             "public_ip": "",
             "provider": "python",
+            "socks5_enabled": "0",
+            "socks5_port": "1080",
         }
         for key, value in defaults.items():
             conn.execute(
@@ -186,10 +200,10 @@ def create_user(
         cur = conn.execute(
             """
             INSERT INTO proxy_users
-            (remark, secret, enabled, traffic_limit_gb, expires_at, created_at)
-            VALUES (?, ?, 1, ?, ?, ?)
+            (remark, secret, enabled, traffic_limit_gb, expires_at, created_at, socks_password)
+            VALUES (?, ?, 1, ?, ?, ?, ?)
             """,
-            (remark, secret, traffic_limit_gb, expires_at, _utc_now()),
+            (remark, secret, traffic_limit_gb, expires_at, _utc_now(), secrets.token_urlsafe(12)),
         )
         user_id = cur.lastrowid
     return get_user(user_id)  # type: ignore
@@ -377,3 +391,37 @@ def verify_install_token(token: str) -> bool:
             return False
         now_ts = datetime.now(timezone.utc).timestamp()
         return secrets.compare_digest(row["value"], token) and float(exp_row["value"]) > now_ts
+
+
+def update_node(node_id: int, **fields: Any) -> Optional[Dict[str, Any]]:
+    allowed = {"name", "proxy_port", "public_ip", "domain"}
+    updates = {k: v for k, v in fields.items() if k in allowed}
+    if not updates:
+        return get_node(node_id)
+    # nodes 表没有 domain 列，存到 public_ip 同级的扩展字段——这里用内存+推送，持久化到 settings 风格的 node_meta 表
+    cols = ", ".join(f"{k} = ?" for k in updates if k in ("name", "proxy_port", "public_ip"))
+    values = [v for k, v in updates.items() if k in ("name", "proxy_port", "public_ip")]
+    with get_conn() as conn:
+        if cols:
+            conn.execute(f"UPDATE nodes SET {cols} WHERE id = ?", values + [node_id])
+        if "domain" in updates:
+            conn.execute(
+                """CREATE TABLE IF NOT EXISTS node_meta
+                   (node_id INTEGER PRIMARY KEY, domain TEXT)"""
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO node_meta (node_id, domain) VALUES (?, ?)",
+                (node_id, updates["domain"]),
+            )
+    return get_node(node_id)
+
+
+def get_node_domain(node_id: int) -> str:
+    with get_conn() as conn:
+        try:
+            row = conn.execute(
+                "SELECT domain FROM node_meta WHERE node_id = ?", (node_id,)
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return ""
+        return row["domain"] if row else ""

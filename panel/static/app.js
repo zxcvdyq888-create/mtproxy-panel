@@ -424,6 +424,15 @@ async function showShare(id) {
   modalLink = user.tg_link;
   document.getElementById('modal-title').textContent = `分享 — ${user.remark || '未命名'}`;
   document.getElementById('modal-link').textContent = user.tg_link;
+  // SOCKS5 信息
+  try {
+    const s = await api('/api/socks5/status');
+    const server = dashboardData.proxy.public_ip || '';
+    document.getElementById('modal-socks').innerHTML = `
+      <div class="socks-row"><span>SOCKS5 服务器</span><code>${server}:${s.port}</code></div>
+      <div class="socks-row"><span>用户名</span><code>${user.socks_user || ''}</code></div>
+      <div class="socks-row"><span>密码</span><code>${user.socks_pass || ''}</code></div>`;
+  } catch (e) { /* 忽略 */ }
   setLoading(true);
   try {
     const res = await fetch(`${API}/api/users/${id}/qrcode`, { headers: { Authorization: `Bearer ${token}` } });
@@ -607,6 +616,7 @@ function renderNodes() {
       <div class="node-card-actions">
         <button class="btn btn-ghost btn-sm" onclick="syncNode(${n.id})" ${online ? '' : 'disabled'}>同步用户</button>
         <button class="btn btn-ghost btn-sm" onclick="copyNodeLinks(${n.id})" ${online ? '' : 'disabled'}>复制链接</button>
+        <button class="btn btn-ghost btn-sm" onclick="showEditNodeModal(${n.id})">编辑</button>
         <button class="btn btn-danger btn-sm" onclick="deleteNode(${n.id}, '${escapeHtml(n.name)}')">删除</button>
       </div>
     </div>`;
@@ -671,4 +681,59 @@ const _origSwitchTab = switchTab;
 switchTab = function(tab) {
   _origSwitchTab(tab);
   if (tab === 'nodes') loadNodes();
+  if (tab === 'settings') loadSocks5Status();
 };
+
+// ===== 编辑节点 =====
+function showEditNodeModal(id) {
+  const n = _allNodes.find(x => x.id === id);
+  if (!n) return;
+  document.getElementById('edit-node-id').value = id;
+  document.getElementById('edit-node-name').value = n.name || '';
+  document.getElementById('edit-node-port').value = n.proxy_port || 443;
+  document.getElementById('edit-node-domain').value = n.domain || '';
+  show(document.getElementById('modal-edit-node'));
+}
+
+async function saveNodeEdit() {
+  const id = document.getElementById('edit-node-id').value;
+  const body = {
+    name: document.getElementById('edit-node-name').value.trim(),
+    proxy_port: parseInt(document.getElementById('edit-node-port').value) || 443,
+    domain: document.getElementById('edit-node-domain').value.trim(),
+  };
+  if (!body.name) { toast('名称不能为空', 'error'); return; }
+  try {
+    await api(`/api/nodes/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    toast('已更新，节点代理正在重启', 'success');
+    closeModal('modal-edit-node');
+    loadNodes();
+  } catch (e) { toast('更新失败', 'error'); }
+}
+
+// ===== SOCKS5 =====
+async function loadSocks5Status() {
+  try {
+    const s = await api('/api/socks5/status');
+    document.getElementById('set-socks5-port').value = s.port;
+    document.getElementById('socks5-badge').innerHTML =
+      `<span class="badge ${s.running ? 'success' : 'danger'}">${s.running ? '运行中' : '已停止'}</span>`;
+  } catch (e) { /* 忽略 */ }
+}
+
+async function socks5Action(action) {
+  try {
+    const s = await api(`/api/socks5/${action}`, { method: 'POST' });
+    toast(s.running ? 'SOCKS5 已启动' : 'SOCKS5 已停止', 'success');
+    loadSocks5Status();
+  } catch (e) { toast('操作失败', 'error'); }
+}
+
+async function socks5SavePort() {
+  const port = parseInt(document.getElementById('set-socks5-port').value) || 1080;
+  try {
+    await api('/api/socks5/port', { method: 'PUT', body: JSON.stringify({ port }) });
+    toast('端口已保存', 'success');
+    loadSocks5Status();
+  } catch (e) { toast('保存失败', 'error'); }
+}
