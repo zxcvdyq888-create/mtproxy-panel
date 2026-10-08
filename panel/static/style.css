@@ -583,8 +583,7 @@ body {
 }
 
 .node-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--flux-shadow-hover);
 }
 
 .node-card.node-offline {
@@ -1330,4 +1329,131 @@ input:focus, select:focus {
   font-weight: 700;
   padding: 14px 16px 6px;
   letter-spacing: 0.05em;
+}
+
+/* ============ HeroUI 风格重构 ============ */
+:root {
+  --flux-bg: #f4f4f5;
+  --flux-card: #ffffff;
+  --flux-border: #e4e4e7;
+  --flux-primary: #006fee;
+  --flux-text: #18181b;
+  --flux-muted: #71717a;
+  --flux-radius: 14px;
+  --flux-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+  --flux-shadow-hover: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+/* 浮动标签输入框 */
+.flux-field { position: relative; margin-bottom: 16px; }
+.flux-field input, .flux-field select, .flux-field textarea {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 26px 14px 10px;
+  font-size: 0.92rem;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s;
+}
+.flux-field input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.flux-field input:focus, .flux-field select:focus, .flux-field textarea:focus {
+  border-color: var(--flux-primary);
+}
+.flux-field label {
+  position: absolute;
+  left: 14px;
+  top: 8px;
+  font-size: 0.72rem;
+  color: var(--flux-muted);
+  pointer-events: none;
+  font-weight: 500;
+}
+.flux-field .flux-hint {
+  font-size: 0.75rem;
+  color: var(--flux-muted);
+  margin-top: 6px;
+  padding-left: 2px;
+}
+
+/* 信息提示框 */
+.flux-info {
+  display: flex;
+  gap: 10px;
+  background: rgba(0, 111, 238, 0.08);
+  border: 1px solid rgba(0, 111, 238, 0.2);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+.flux-info .flux-info-icon {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  background: #006fee;
+  color: #fff;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+/* 干净卡片 */
+.flux-card {
+  background: var(--flux-card);
+  border: 1px solid var(--flux-border);
+  border-radius: var(--flux-radius);
+  box-shadow: var(--flux-shadow);
+  padding: 18px;
+  transition: box-shadow 0.2s;
+}
+.flux-card:hover { box-shadow: var(--flux-shadow-hover); }
+
+/* 统计卡片 */
+.flux-stat {
+  background: var(--flux-card);
+  border: 1px solid var(--flux-border);
+  border-radius: var(--flux-radius);
+  box-shadow: var(--flux-shadow);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.flux-stat-top { display: flex; justify-content: space-between; align-items: center; }
+.flux-stat-label { font-size: 0.85rem; color: var(--flux-muted); }
+.flux-stat-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.1rem;
+}
+.flux-stat-value { font-size: 1.5rem; font-weight: 800; color: var(--flux-text); }
+.flux-stat-bar { height: 6px; background: #f0f0f2; border-radius: 3px; overflow: hidden; }
+.flux-stat-bar > div { height: 100%; background: var(--flux-primary); border-radius: 3px; }
+
+.modal-sub {
+  font-size: 0.82rem;
+  color: var(--flux-muted);
+  margin: 4px 0 0;
+  font-weight: 400;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.modal-header h3 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
 }

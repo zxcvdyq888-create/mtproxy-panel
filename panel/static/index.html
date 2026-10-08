@@ -352,24 +352,28 @@
 <div id="modal-add-node" class="modal-overlay hidden" onclick="closeModal('modal-add-node', event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>添加机器</h3>
+      <div><h3>新增节点</h3><p class="modal-sub">创建新的节点配置</p></div>
       <button class="btn btn-icon" onclick="closeModal('modal-add-node')">&times;</button>
     </div>
-    <div class="form-group">
-      <label>机器名称</label>
-      <input type="text" id="node-name" placeholder="如：日本节点">
+    <div class="flux-field">
+      <label>节点名称</label>
+      <input type="text" id="node-name" placeholder="请输入节点名称">
     </div>
-    <div class="form-group">
-      <label>端口范围</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="number" id="node-port-start" value="10000" min="1" max="65535" style="flex:1">
-        <span style="color:var(--text-muted)">—</span>
-        <input type="number" id="node-port-end" value="20000" min="1" max="65535" style="flex:1">
+    <div style="display:flex;gap:12px">
+      <div class="flux-field" style="flex:1">
+        <label>起始端口</label>
+        <input type="number" id="node-port-start" value="10000" min="1" max="65535">
       </div>
-      <p class="hint-text">这台机器的转发只能用此范围内的端口</p>
+      <div class="flux-field" style="flex:1">
+        <label>结束端口</label>
+        <input type="number" id="node-port-end" value="20000" min="1" max="65535">
+      </div>
     </div>
-    <button class="btn btn-primary btn-block" onclick="saveNode()">创建</button>
-    <p class="hint-text" style="margin-top:10px">创建后点机器卡片上的「安装」获取专属安装命令</p>
+    <div class="flux-info"><span class="flux-info-icon">i</span><span>创建后点节点卡片上的「安装」获取专属安装命令，在新机器上执行后自动上线</span></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-node')">取消</button>
+      <button class="btn btn-primary" onclick="saveNode()">创建</button>
+    </div>
   </div>
 </div>
 
@@ -377,10 +381,10 @@
 <div id="modal-node-install" class="modal-overlay hidden" onclick="closeModal('modal-node-install', event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>安装命令</h3>
+      <div><h3>安装节点</h3><p class="modal-sub">在新机器上执行以下命令</p></div>
       <button class="btn btn-icon" onclick="closeModal('modal-node-install')">&times;</button>
     </div>
-    <p class="hint-text" style="margin-bottom:12px">在新机器上以 <b>root</b> 执行，装完自动上线：</p>
+    <div class="flux-info"><span class="flux-info-icon">i</span><span>在新机器上以 <b>root</b> 执行，安装完成后节点自动上线</span></div>
     <div class="code-block">
       <code id="node-install-cmd"></code>
       <button class="btn btn-ghost btn-sm" onclick="copyText(document.getElementById('node-install-cmd').textContent).then(()=>toast('已复制','success'))">复制</button>
@@ -392,24 +396,27 @@
 <div id="modal-edit-node" class="modal-overlay hidden" onclick="closeModal('modal-edit-node', event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>编辑服务器</h3>
+      <div><h3>编辑节点</h3><p class="modal-sub">修改节点配置</p></div>
       <button class="btn btn-icon" onclick="closeModal('modal-edit-node')">&times;</button>
     </div>
     <input type="hidden" id="edit-node-id">
-    <div class="form-group">
-      <label>名称</label>
-      <input type="text" id="edit-node-name" placeholder="如：美国节点">
+    <div class="flux-field">
+      <label>节点名称</label>
+      <input type="text" id="edit-node-name" placeholder="请输入节点名称">
     </div>
-    <div class="form-group">
+    <div class="flux-field">
       <label>代理端口</label>
       <input type="number" id="edit-node-port" min="1" max="65535" placeholder="443">
-      <p class="hint-text">修改后节点代理自动重启，记得放行对应端口</p>
+      <div class="flux-hint">修改后节点代理自动重启，记得放行对应端口</div>
     </div>
-    <div class="form-group">
+    <div class="flux-field">
       <label>伪装域名（Fake-TLS）</label>
       <input type="text" id="edit-node-domain" placeholder="如：azure.microsoft.com">
     </div>
-    <button class="btn btn-primary" onclick="saveNodeEdit()">保存</button>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-node')">取消</button>
+      <button class="btn btn-primary" onclick="saveNodeEdit()">保存</button>
+    </div>
   </div>
 </div>
 
@@ -417,28 +424,31 @@
 <div id="modal-add-forward" class="modal-overlay hidden" onclick="closeModal('modal-add-forward', event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>添加转发</h3>
+      <div><h3>新增转发</h3><p class="modal-sub">创建新的转发配置</p></div>
       <button class="btn btn-icon" onclick="closeModal('modal-add-forward')">&times;</button>
     </div>
-    <div class="form-group">
+    <div class="flux-field">
       <label>转发名称</label>
-      <input type="text" id="fw-name" placeholder="如：游戏端口">
+      <input type="text" id="fw-name" placeholder="请输入转发名称">
     </div>
-    <div class="form-group">
+    <div class="flux-field">
       <label>选择隧道</label>
       <select id="fw-tunnel"></select>
     </div>
-    <div class="form-group">
+    <div class="flux-field">
       <label>入口端口</label>
       <input type="number" id="fw-listen-port" min="1" max="65535" placeholder="留空自动分配">
-      <p class="hint-text" id="fw-port-hint"></p>
+      <div class="flux-hint" id="fw-port-hint"></div>
     </div>
-    <div class="form-group">
+    <div class="flux-field">
       <label>远程地址</label>
       <input type="text" id="fw-target" placeholder="如：1.2.3.4:9443">
-      <p class="hint-text">格式：IP:端口 或 域名:端口</p>
+      <div class="flux-hint">格式：IP:端口 或 域名:端口</div>
     </div>
-    <button class="btn btn-primary btn-block" onclick="saveForwardRule()">创建</button>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-forward')">取消</button>
+      <button class="btn btn-primary" onclick="saveForwardRule()">创建</button>
+    </div>
   </div>
 </div>
 
@@ -446,22 +456,26 @@
 <div id="modal-add-tunnel" class="modal-overlay hidden" onclick="closeModal('modal-add-tunnel', event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>新建隧道</h3>
+      <div><h3>新增隧道</h3><p class="modal-sub">创建新的隧道配置</p></div>
       <button class="btn btn-icon" onclick="closeModal('modal-add-tunnel')">&times;</button>
     </div>
-    <div class="form-group">
+    <div class="flux-field">
       <label>隧道名称</label>
-      <input type="text" id="tunnel-name" placeholder="如：日本→香港">
+      <input type="text" id="tunnel-name" placeholder="请输入隧道名称">
     </div>
-    <div class="form-group">
+    <div class="flux-field">
       <label>入口节点</label>
       <select id="tunnel-in-node"></select>
     </div>
-    <div class="form-group">
+    <div class="flux-field">
       <label>出口节点</label>
       <select id="tunnel-out-node"></select>
+      <div class="flux-hint">流量从入口节点进入，经隧道送到出口节点发出</div>
     </div>
-    <button class="btn btn-primary btn-block" onclick="saveTunnel()">创建</button>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-add-tunnel')">取消</button>
+      <button class="btn btn-primary" onclick="saveTunnel()">创建</button>
+    </div>
   </div>
 </div>
 
