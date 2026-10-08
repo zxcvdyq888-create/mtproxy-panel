@@ -764,7 +764,23 @@ def list_forward_rules(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
     return rules
 
 @app.post("/api/forward/rules")
+def _alloc_port(node_id: int) -> int:
+    """在节点端口范围内自动分配一个空闲端口。"""
+    node = db.get_node(node_id)
+    ps = node.get("port_start", 10000) if node else 10000
+    pe = node.get("port_end", 20000) if node else 20000
+    used = {r["listen_port"] for r in db.list_forward_rules()
+            if r["listen_node_id"] == node_id}
+    for port in range(ps, pe + 1):
+        if port not in used:
+            return port
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, "该机器端口范围内无空闲端口")
+
+
 def create_forward_rule(body: ForwardRuleRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    # 端口留空则自动分配
+    if not body.listen_port:
+        body.listen_port = _alloc_port(body.listen_node_id)
     # 端口范围与冲突检查
     if body.listen_node_id != 0:
         node = db.get_node(body.listen_node_id)
@@ -779,7 +795,7 @@ def create_forward_rule(body: ForwardRuleRequest, _: str = Depends(verify_token)
             if r["listen_node_id"] == body.listen_node_id and r["listen_port"] == body.listen_port:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
-                    f"端口 {body.listen_port} 在该机器上已被隧道「{r['name']}」占用")
+                    f"端口 {body.listen_port} 在该机器上已被「{r['name']}」占用")
 
     if not body.listen_port or not body.target_host or not body.target_port:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "监听端口、目标地址、目标端口必填")

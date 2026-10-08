@@ -347,69 +347,36 @@
   </main>
 </div>
 
-<!-- 上机三步向导 -->
+<!-- 添加机器 -->
 <div id="modal-add-node" class="modal-overlay hidden" onclick="closeModal('modal-add-node', event)">
-  <div class="modal modal-lg" onclick="event.stopPropagation()">
+  <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h3>添加机器</h3>
       <button class="btn btn-icon" onclick="closeModal('modal-add-node')">&times;</button>
     </div>
-
-    <!-- 步骤条 -->
-    <div class="wizard-steps">
-      <div class="wizard-step active" id="ws-1"><span>1</span>填信息</div>
-      <div class="wizard-line"></div>
-      <div class="wizard-step" id="ws-2"><span>2</span>拿命令</div>
-      <div class="wizard-line"></div>
-      <div class="wizard-step" id="ws-3"><span>3</span>上线</div>
+    <div class="form-group">
+      <label>机器名称</label>
+      <input type="text" id="node-name" placeholder="如：日本节点">
     </div>
-
-    <!-- 第1步 -->
-    <div id="wizard-p1">
-      <div class="form-group">
-        <label>机器名称</label>
-        <input type="text" id="node-name" placeholder="如：日本节点、香港中转">
+    <div class="form-group">
+      <label>端口范围</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="node-port-start" value="10000" min="1" max="65535" style="flex:1">
+        <span style="color:var(--text-muted)">—</span>
+        <input type="number" id="node-port-end" value="20000" min="1" max="65535" style="flex:1">
       </div>
+    </div>
+    <div id="node-cmd-box" class="hidden">
       <div class="form-group">
-        <label>分配端口范围</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input type="number" id="node-port-start" value="10000" min="1" max="65535" style="flex:1">
-          <span style="color:var(--text-muted)">—</span>
-          <input type="number" id="node-port-end" value="20000" min="1" max="65535" style="flex:1">
+        <label>在新机器上以 root 执行：</label>
+        <div class="code-block">
+          <code id="install-cmd-text"></code>
+          <button class="btn btn-ghost btn-sm" onclick="copyInstallCmd()">复制</button>
         </div>
-        <p class="hint-text">这台机器的转发隧道只能用这个范围内的端口，端口不打架、不乱套</p>
       </div>
-      <button class="btn btn-primary btn-block" onclick="wizardNext()">下一步：生成安装命令</button>
+      <p class="hint-text">执行完机器会自动上线，端口范围内的端口按需放行。</p>
     </div>
-
-    <!-- 第2步 -->
-    <div id="wizard-p2" class="hidden">
-      <p class="hint-text" style="margin-bottom:12px">在新机器上以 <b>root</b> 执行这条命令，装完自动注册上线：</p>
-      <div class="code-block">
-        <code id="install-cmd-text"></code>
-        <button class="btn btn-ghost btn-sm" onclick="copyInstallCmd()">复制</button>
-      </div>
-      <p class="hint-text" style="margin:12px 0">需放行 8899（agent）端口；转发用的端口在上面分配的范围内按需放行。</p>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost" onclick="wizardBack()">上一步</button>
-        <button class="btn btn-primary" style="flex:1" onclick="wizardCheck()">我已执行，去检查上线状态</button>
-      </div>
-    </div>
-
-    <!-- 第3步 -->
-    <div id="wizard-p3" class="hidden">
-      <div id="wizard-online-ok" class="hidden">
-        <div class="wizard-success">✅ 机器已上线！</div>
-        <p class="hint-text" id="wizard-online-info"></p>
-        <button class="btn btn-primary btn-block" onclick="closeModal('modal-add-node');refreshNodes();">完成，去建隧道</button>
-      </div>
-      <div id="wizard-online-wait">
-        <div class="wizard-loading">⏳ 等待机器上线…</div>
-        <p class="hint-text">机器执行完安装命令后会自动注册，一般 1 分钟内上线。</p>
-        <button class="btn btn-ghost btn-block" onclick="wizardCheck()">再检查一次</button>
-        <button class="btn btn-ghost btn-block" onclick="wizardBack2()">返回复制命令</button>
-      </div>
-    </div>
+    <button class="btn btn-primary btn-block" id="node-gen-btn" onclick="genNodeCmd()">生成安装命令</button>
   </div>
 </div>
 
@@ -438,125 +405,55 @@
   </div>
 </div>
 
-<!-- 添加端口转发弹窗 -->
+<!-- 添加端口转发 -->
 <div id="modal-add-forward" class="modal-overlay hidden" onclick="closeModal('modal-add-forward', event)">
-  <div class="modal modal-lg" onclick="event.stopPropagation()">
+  <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>添加端口转发</h3>
+      <h3>添加转发</h3>
       <button class="btn btn-icon" onclick="closeModal('modal-add-forward')">&times;</button>
     </div>
-
+    <div class="form-group">
+      <label>转发名称</label>
+      <input type="text" id="fw-name" placeholder="如：游戏端口">
+    </div>
     <div class="form-group">
       <label>选择隧道</label>
       <select id="fw-tunnel"></select>
-      <p class="hint-text">监听机器由隧道入口决定，目标默认填隧道出口 IP</p>
-    </div>
-
-    <div class="form-group">
-      <label>转发名称</label>
-      <input type="text" id="fw-name" placeholder="如：游戏端口、网站 80">
-    </div>
-
-    <div class="fw-flow">
-      <div class="fw-step">
-        <div class="fw-step-title">① 监听 <span class="fw-step-sub" id="fw-node-label">—</span></div>
-        <input type="hidden" id="fw-node" value="0">
-        <div class="form-group">
-          <label>入口端口（客户连这个端口）</label>
-          <input type="number" id="fw-listen-port" min="1" max="65535" placeholder="如：8443">
-        </div>
-      </div>
-      <div class="fw-arrow">&darr;<span>转发到</span>&darr;</div>
-      <div class="fw-step">
-        <div class="fw-step-title">② 目标 <span class="fw-step-sub">流量送到这里</span></div>
-        <div class="form-grid" style="grid-template-columns:1fr 1fr">
-          <div class="form-group">
-            <label>目标地址</label>
-            <input type="text" id="fw-target-host" placeholder="如：1.2.3.4">
-          </div>
-          <div class="form-group">
-            <label>目标端口</label>
-            <input type="number" id="fw-target-port" min="1" max="65535" placeholder="如：9443">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="fw-preview"><span class="fw-preview-label">预览：</span><span id="fw-preview-text">—</span></div>
-
-    <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
-      <div class="form-group">
-        <label>协议</label>
-        <select id="fw-protocol">
-          <option value="tcp">TCP</option>
-          <option value="udp">UDP</option>
-          <option value="both">TCP+UDP</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>归属用户</label>
-        <select id="fw-user"><option value="0">不指定</option></select>
-      </div>
-      <div class="form-group">
-        <label>限速 Mbps</label>
-        <input type="number" id="fw-speed" min="0" placeholder="0=不限">
-      </div>
     </div>
     <div class="form-group">
-      <label>流量配额 GB</label>
-      <input type="number" id="fw-quota" min="0" placeholder="0=不限">
+      <label>入口端口</label>
+      <input type="number" id="fw-listen-port" min="1" max="65535" placeholder="留空自动分配">
+      <p class="hint-text" id="fw-port-hint"></p>
     </div>
-    <button class="btn btn-primary btn-block" onclick="saveForwardRule()">保存并启动</button>
+    <div class="form-group">
+      <label>远程地址</label>
+      <input type="text" id="fw-target" placeholder="如：1.2.3.4:9443">
+      <p class="hint-text">格式：IP:端口 或 域名:端口</p>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="saveForwardRule()">创建</button>
   </div>
 </div>
 
-<!-- 新建隧道弹窗 -->
+<!-- 新建隧道 -->
 <div id="modal-add-tunnel" class="modal-overlay hidden" onclick="closeModal('modal-add-tunnel', event)">
-  <div class="modal modal-lg" onclick="event.stopPropagation()">
+  <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h3>新建隧道</h3>
       <button class="btn btn-icon" onclick="closeModal('modal-add-tunnel')">&times;</button>
     </div>
     <div class="form-group">
       <label>隧道名称</label>
-      <input type="text" id="tunnel-name" placeholder="如：日本→香港专线">
+      <input type="text" id="tunnel-name" placeholder="如：日本→香港">
     </div>
-    <div class="fw-flow">
-      <div class="fw-step">
-        <div class="fw-step-title">入口机器 <span class="fw-step-sub">客户流量从这里进</span></div>
-        <div class="form-group">
-          <select id="tunnel-in-node"></select>
-        </div>
-      </div>
-      <div class="fw-arrow">&darr;<span>隧道</span>&darr;</div>
-      <div class="fw-step">
-        <div class="fw-step-title">出口机器 <span class="fw-step-sub">流量从这里出</span></div>
-        <div class="form-group">
-          <select id="tunnel-out-node"></select>
-        </div>
-      </div>
+    <div class="form-group">
+      <label>入口节点</label>
+      <select id="tunnel-in-node"></select>
     </div>
-    <div class="fw-preview"><span class="fw-preview-label">预览：</span><span id="tunnel-preview-text">—</span></div>
-    <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
-      <div class="form-group">
-        <label>协议</label>
-        <select id="tunnel-protocol">
-          <option value="tcp">TCP</option>
-          <option value="udp">UDP</option>
-          <option value="both">TCP+UDP</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>归属用户</label>
-        <select id="tunnel-user"><option value="0">不指定</option></select>
-      </div>
-      <div class="form-group">
-        <label>限速 Mbps</label>
-        <input type="number" id="tunnel-speed" min="0" placeholder="0=不限">
-      </div>
+    <div class="form-group">
+      <label>出口节点</label>
+      <select id="tunnel-out-node"></select>
     </div>
-    <p class="hint-text" style="margin-bottom:12px">建好隧道后，去「端口转发」页面往这条隧道里添加具体的端口映射。</p>
-    <button class="btn btn-primary btn-block" onclick="saveTunnel()">创建隧道</button>
+    <button class="btn btn-primary btn-block" onclick="saveTunnel()">创建</button>
   </div>
 </div>
 
