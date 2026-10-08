@@ -454,8 +454,30 @@ body {
 .stat-label { font-size: 11.5px; color: var(--text-muted); margin-bottom: 2px; }
 .user-card-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .empty-state {
-  text-align: center; color: var(--text-muted);
-  padding: 48px 20px; font-size: 14px;
+  text-align: center;
+  padding: 64px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.empty-state .empty-icon {
+  width: 64px; height: 64px;
+  margin: 0 auto 16px;
+  background: var(--surface-2);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  font-size: 1.6rem;
+}
+.empty-state .empty-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.empty-state .empty-sub {
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 /* ---------- 弹窗 ---------- */
@@ -1457,3 +1479,21 @@ input:focus, select:focus {
   gap: 12px;
   margin-top: 20px;
 }
+
+/* flux 风格小药丸按钮 */
+.btn-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btn-pill:hover { opacity: 0.85; }
+.btn-pill.blue { background: #dbeafe; color: #1d4ed8; }
+.btn-pill.orange { background: #fef3c7; color: #b45309; }
+.btn-pill.green { background: #d1fae5; color: #047857; }
+.btn-pill.gray { background: #f3f4f6; color: #4b5563; }
+.page-actions { display: flex; gap: 10px; align-items: center; }

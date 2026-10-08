@@ -635,7 +635,11 @@ function renderNodes() {
   }
 
   if (!_allNodes.length) {
-    html += '<div class="empty-state">暂无远程服务器，点右上角添加</div>';
+    html += `<div class="empty-state">
+      <div class="empty-icon">🖥</div>
+      <div class="empty-title">暂无节点配置</div>
+      <div class="empty-sub">还没有创建任何节点配置，点击上方按钮开始创建</div>
+    </div>`;
   }
   grid.innerHTML = html;
 }
@@ -804,7 +808,11 @@ async function loadTunnels() {
 function renderTunnels() {
   const el = document.getElementById('tunnel-list');
   if (!_forwardTunnels.length) {
-    el.innerHTML = '<p class="hint-text">暂无隧道，点右上角「新建隧道」。</p>';
+    el.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">🔗</div>
+      <div class="empty-title">暂无隧道配置</div>
+      <div class="empty-sub">还没有创建任何隧道配置，点击上方按钮开始创建</div>
+    </div>`;
     return;
   }
   el.innerHTML = '<div class="tunnel-grid">' + _forwardTunnels.map(c => {
@@ -880,7 +888,11 @@ async function loadForward() {
 function renderForwardRules() {
   const el = document.getElementById('forward-rules-list');
   if (!_forwardRules.length) {
-    el.innerHTML = '<p class="hint-text">暂无转发，点右上角「添加转发」。先去「隧道管理」建隧道。</p>';
+    el.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">⇅</div>
+      <div class="empty-title">暂无转发配置</div>
+      <div class="empty-sub">还没有创建任何转发配置，点击上方按钮开始创建</div>
+    </div>`;
     return;
   }
   const groups = {};
