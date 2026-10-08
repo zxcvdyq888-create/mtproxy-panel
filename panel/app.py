@@ -893,6 +893,21 @@ def delete_forward_chain(chain_id: int, _: str = Depends(verify_token)) -> Dict[
 
 @app.delete("/api/nodes/{node_id}")
 def remove_node(node_id: int, _: str = Depends(verify_token)) -> Dict[str, str]:
+    node = db.get_node(node_id)
+    if not node:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "节点不存在")
+    # 先停掉并删除该节点上的所有转发
+    for r in db.list_forward_rules():
+        if r["listen_node_id"] == node_id:
+            try:
+                _forward_stop_on_node(node, r["id"])
+            except Exception:
+                pass
+            db.delete_forward_rule(r["id"])
+    # 删除以该节点为出入口的隧道
+    for c in db.list_forward_chains():
+        if c.get("in_node_id") == node_id or c.get("out_node_id") == node_id:
+            db.delete_forward_chain(c["id"])
     if not db.delete_node(node_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "节点不存在")
     return {"status": "ok"}

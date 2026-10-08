@@ -311,7 +311,7 @@
               <button class="btn btn-primary btn-sm" onclick="showAddNodeModal()">+ 添加服务器</button>
             </div>
           </div>
-          <p class="hint-text" style="margin-bottom:16px">主面板所在服务器为本地节点。添加更多服务器后，用户密钥会自动同步到所有在线节点，每个节点独立生成 TG 代理链接。</p>
+          <p class="hint-text" style="margin-bottom:16px">添加服务器后，用户密钥自动同步到所有在线节点。</p>
           <div class="node-grid" id="nodes-grid"></div>
         </div>
       </section>
@@ -325,7 +325,7 @@
               <button class="btn btn-primary btn-sm" onclick="showAddTunnelModal()">+ 新建隧道</button>
             </div>
           </div>
-          <p class="hint-text" style="margin-bottom:16px">隧道是机器之间的管道：入口机器 → 出口机器。建好隧道后，去「端口转发」里往管道里加具体的端口映射。</p>
+          
           <div id="tunnel-list"></div>
         </div>
       </section>
@@ -339,7 +339,7 @@
               <button class="btn btn-primary btn-sm" onclick="showAddForwardModal()">+ 添加转发</button>
             </div>
           </div>
-          <p class="hint-text" style="margin-bottom:16px">每条转发归属一条隧道：在隧道的入口机器上监听端口，流量送到目标地址。</p>
+          
           <div id="forward-rules-list"></div>
         </div>
       </section>

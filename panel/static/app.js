@@ -703,11 +703,16 @@ async function copyNodeLinks(id) {
 }
 
 async function deleteNode(id, name) {
-  if (!confirm(`确定删除服务器「${name}」吗？该服务器上的代理不会自动卸载。`)) return;
+  if (!confirm(`确定删除服务器「${name}」吗？`)) return;
   try {
-    await api(`/api/nodes/${id}`, { method: 'DELETE' });
-    toast('已删除', 'success'); loadNodes();
-  } catch (e) { toast('删除失败', 'error'); }
+    const r = await api(`/api/nodes/${id}`, { method: 'DELETE' });
+    if (r.status === 'ok') {
+      toast('已删除', 'success');
+      loadNodes();
+    } else {
+      toast('删除失败', 'error');
+    }
+  } catch (e) { toast('删除失败: ' + (e.message || ''), 'error'); }
 }
 
 // 切换到服务器 tab 时加载
