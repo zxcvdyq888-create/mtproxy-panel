@@ -89,10 +89,27 @@ def init_db() -> None:
             """CREATE TABLE IF NOT EXISTS forward_chains (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL DEFAULT '',
+                in_node_id INTEGER NOT NULL DEFAULT 0,
+                out_node_id INTEGER NOT NULL DEFAULT 0,
+                protocol TEXT NOT NULL DEFAULT 'tcp',
+                user_id INTEGER NOT NULL DEFAULT 0,
+                speed_limit_mbps INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             );
             """
         )
+        # 隧道表补出入口机器
+        for _col, _def in [
+            ("in_node_id", "INTEGER NOT NULL DEFAULT 0"),
+            ("out_node_id", "INTEGER NOT NULL DEFAULT 0"),
+            ("protocol", "TEXT NOT NULL DEFAULT 'tcp'"),
+            ("user_id", "INTEGER NOT NULL DEFAULT 0"),
+            ("speed_limit_mbps", "INTEGER NOT NULL DEFAULT 0"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE forward_chains ADD COLUMN {_col} {_def}")
+            except sqlite3.OperationalError:
+                pass
         # 节点表补端口范围
         for _col, _def in [
             ("port_start", "INTEGER NOT NULL DEFAULT 10000"),
@@ -531,11 +548,16 @@ def delete_forward_rule(rule_id: int) -> bool:
         conn.commit()
         return cur.rowcount > 0
 
-def create_forward_chain(name: str) -> Dict[str, Any]:
+def create_forward_chain(name: str, in_node_id: int = 0, out_node_id: int = 0,
+                       protocol: str = "tcp", user_id: int = 0,
+                       speed_limit_mbps: int = 0) -> Dict[str, Any]:
     with get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO forward_chains (name, created_at) VALUES (?, ?)",
-            (name, _utc_now()))
+            "INSERT INTO forward_chains "
+            "(name, in_node_id, out_node_id, protocol, user_id, "
+            "speed_limit_mbps, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (name, in_node_id, out_node_id, protocol, user_id,
+             speed_limit_mbps, _utc_now()))
         cid = cur.lastrowid
         conn.commit()
         conn.row_factory = sqlite3.Row

@@ -704,6 +704,11 @@ class ForwardRuleRequest(BaseModel):
 
 class ForwardChainRequest(BaseModel):
     name: str = ""
+    in_node_id: int = 0
+    out_node_id: int = 0
+    protocol: str = "tcp"
+    user_id: int = 0
+    speed_limit_mbps: int = 0
 
 def _get_listen_node(rule: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """获取规则的监听节点。listen_node_id=0 表示本机。"""
@@ -831,20 +836,31 @@ def list_forward_chains(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
     chains = db.list_forward_chains()
     rules = db.list_forward_rules()
     nodes = {n["id"]: n for n in db.list_nodes()}
+    users = {u["id"]: u for u in db.list_users()}
+    def _nname(nid):
+        return "本机" if nid == 0 else nodes.get(nid, {}).get("name", "未知")
     for c in chains:
+        c["in_node_name"] = _nname(c.get("in_node_id", 0))
+        c["out_node_name"] = _nname(c.get("out_node_id", 0))
+        uid = c.get("user_id", 0)
+        c["user_name"] = users.get(uid, {}).get("remark", "") if uid else ""
         c["rules"] = sorted(
             [r for r in rules if r["chain_id"] == c["id"]],
             key=lambda x: x["chain_order"])
         for r in c["rules"]:
-            nid = r["listen_node_id"]
-            r["listen_node_name"] = "本机" if nid == 0 else nodes.get(nid, {}).get("name", "未知")
+            r["listen_node_name"] = _nname(r["listen_node_id"])
     return chains
 
 @app.post("/api/forward/chains")
 def create_forward_chain(body: ForwardChainRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
     if not body.name:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "链路名称必填")
-    return db.create_forward_chain(body.name)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "隧道名称必填")
+    if not body.in_node_id and not body.out_node_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "请选择入口和出口机器")
+    return db.create_forward_chain(
+        body.name, in_node_id=body.in_node_id, out_node_id=body.out_node_id,
+        protocol=body.protocol, user_id=body.user_id,
+        speed_limit_mbps=body.speed_limit_mbps)
 
 @app.delete("/api/forward/chains/{chain_id}")
 def delete_forward_chain(chain_id: int, _: str = Depends(verify_token)) -> Dict[str, str]:

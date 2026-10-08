@@ -73,6 +73,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01"/></svg>
         服务器
       </button>
+      <button class="nav-item" data-tab="tunnel" onclick="switchTab('tunnel')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17V7a2 2 0 012-2h12a2 2 0 012 2v10M4 17a2 2 0 002 2h12a2 2 0 002-2M4 17h16"/></svg>
+        隧道管理
+      </button>
       <button class="nav-item" data-tab="forward" onclick="switchTab('forward')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13"/></svg>
         端口转发
@@ -312,19 +316,30 @@
         </div>
       </section>
 
+      <!-- 隧道管理 -->
+      <section id="tab-tunnel" class="panel-section">
+        <div class="card">
+          <div class="card-header">
+            <h2>隧道管理</h2>
+            <div class="header-actions">
+              <button class="btn btn-primary btn-sm" onclick="showAddTunnelModal()">+ 新建隧道</button>
+            </div>
+          </div>
+          <p class="hint-text" style="margin-bottom:16px">隧道是机器之间的管道：入口机器 → 出口机器。建好隧道后，去「端口转发」里往管道里加具体的端口映射。</p>
+          <div id="tunnel-list"></div>
+        </div>
+      </section>
+
       <!-- 端口转发 -->
       <section id="tab-forward" class="panel-section">
         <div class="card">
           <div class="card-header">
-            <h2>转发链路</h2>
+            <h2>端口转发</h2>
             <div class="header-actions">
-              <button class="btn btn-ghost btn-sm" onclick="showAddChainModal()">+ 新建链路</button>
-              <button class="btn btn-primary btn-sm" onclick="showAddForwardModal()">+ 添加隧道</button>
+              <button class="btn btn-primary btn-sm" onclick="showAddForwardModal()">+ 添加转发</button>
             </div>
           </div>
-          <p class="hint-text" style="margin-bottom:16px">把机器串成转发链：客户 → 日本:8443 → 香港:9443 → 美国:32443。单条转发填一行，链路把多条规则按顺序串起来。</p>
-          <div id="chains-list" style="margin-bottom:20px"></div>
-          <h3 style="margin-bottom:12px;font-size:1rem">转发规则</h3>
+          <p class="hint-text" style="margin-bottom:16px">每条转发归属一条隧道：在隧道的入口机器上监听端口，流量送到目标地址。</p>
           <div id="forward-rules-list"></div>
         </div>
       </section>
@@ -423,42 +438,37 @@
   </div>
 </div>
 
-<!-- 添加隧道弹窗 -->
+<!-- 添加端口转发弹窗 -->
 <div id="modal-add-forward" class="modal-overlay hidden" onclick="closeModal('modal-add-forward', event)">
   <div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>添加隧道</h3>
+      <h3>添加端口转发</h3>
       <button class="btn btn-icon" onclick="closeModal('modal-add-forward')">&times;</button>
     </div>
 
     <div class="form-group">
-      <label>隧道名称</label>
-      <input type="text" id="fw-name" placeholder="如：日本→香港专线">
+      <label>选择隧道</label>
+      <select id="fw-tunnel"></select>
+      <p class="hint-text">监听机器由隧道入口决定，目标默认填隧道出口 IP</p>
     </div>
 
-    <!-- 可视化转发流程 -->
+    <div class="form-group">
+      <label>转发名称</label>
+      <input type="text" id="fw-name" placeholder="如：游戏端口、网站 80">
+    </div>
+
     <div class="fw-flow">
       <div class="fw-step">
-        <div class="fw-step-title">① 从哪里来 <span class="fw-step-sub">客户连这里</span></div>
+        <div class="fw-step-title">① 监听 <span class="fw-step-sub" id="fw-node-label">—</span></div>
+        <input type="hidden" id="fw-node" value="0">
         <div class="form-group">
-          <label>监听机器</label>
-          <div style="display:flex;gap:8px">
-            <select id="fw-node" style="flex:1"></select>
-            <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-add-forward');switchTab('nodes')" title="去添加机器">+ 加机器</button>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>监听端口</label>
+          <label>入口端口（客户连这个端口）</label>
           <input type="number" id="fw-listen-port" min="1" max="65535" placeholder="如：8443">
         </div>
       </div>
-      <div class="fw-arrow">↓<span>转发到</span>↓</div>
+      <div class="fw-arrow">&darr;<span>转发到</span>&darr;</div>
       <div class="fw-step">
-        <div class="fw-step-title">② 到哪里去 <span class="fw-step-sub">流量送到这里</span></div>
-        <div class="form-group">
-          <label>目标机器（选机器自动填 IP）</label>
-          <select id="fw-target-node"><option value="">手动填 IP / 域名</option></select>
-        </div>
+        <div class="fw-step-title">② 目标 <span class="fw-step-sub">流量送到这里</span></div>
         <div class="form-grid" style="grid-template-columns:1fr 1fr">
           <div class="form-group">
             <label>目标地址</label>
@@ -472,11 +482,7 @@
       </div>
     </div>
 
-    <!-- 实时预览 -->
-    <div class="fw-preview" id="fw-preview">
-      <span class="fw-preview-label">预览：</span>
-      <span id="fw-preview-text">—</span>
-    </div>
+    <div class="fw-preview"><span class="fw-preview-label">预览：</span><span id="fw-preview-text">—</span></div>
 
     <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
       <div class="form-group">
@@ -496,33 +502,61 @@
         <input type="number" id="fw-speed" min="0" placeholder="0=不限">
       </div>
     </div>
-    <div class="form-grid" style="grid-template-columns:1fr 1fr">
-      <div class="form-group">
-        <label>流量配额 GB</label>
-        <input type="number" id="fw-quota" min="0" placeholder="0=不限">
-      </div>
-      <div class="form-group">
-        <label>归属链路</label>
-        <select id="fw-chain"><option value="0">单条隧道</option></select>
-      </div>
+    <div class="form-group">
+      <label>流量配额 GB</label>
+      <input type="number" id="fw-quota" min="0" placeholder="0=不限">
     </div>
     <button class="btn btn-primary btn-block" onclick="saveForwardRule()">保存并启动</button>
   </div>
 </div>
 
-<!-- 新建链路弹窗 -->
-<div id="modal-add-chain" class="modal-overlay hidden" onclick="closeModal('modal-add-chain', event)">
-  <div class="modal" onclick="event.stopPropagation()">
+<!-- 新建隧道弹窗 -->
+<div id="modal-add-tunnel" class="modal-overlay hidden" onclick="closeModal('modal-add-tunnel', event)">
+  <div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>新建转发链路</h3>
-      <button class="btn btn-icon" onclick="closeModal('modal-add-chain')">&times;</button>
+      <h3>新建隧道</h3>
+      <button class="btn btn-icon" onclick="closeModal('modal-add-tunnel')">&times;</button>
     </div>
     <div class="form-group">
-      <label>链路名称</label>
-      <input type="text" id="chain-name" placeholder="如：日本→香港→美国">
+      <label>隧道名称</label>
+      <input type="text" id="tunnel-name" placeholder="如：日本→香港专线">
     </div>
-    <p class="hint-text">建好链路后，添加转发规则时选择归属此链路，多条规则按顺序组成完整链条。</p>
-    <button class="btn btn-primary" onclick="saveForwardChain()">创建</button>
+    <div class="fw-flow">
+      <div class="fw-step">
+        <div class="fw-step-title">入口机器 <span class="fw-step-sub">客户流量从这里进</span></div>
+        <div class="form-group">
+          <select id="tunnel-in-node"></select>
+        </div>
+      </div>
+      <div class="fw-arrow">&darr;<span>隧道</span>&darr;</div>
+      <div class="fw-step">
+        <div class="fw-step-title">出口机器 <span class="fw-step-sub">流量从这里出</span></div>
+        <div class="form-group">
+          <select id="tunnel-out-node"></select>
+        </div>
+      </div>
+    </div>
+    <div class="fw-preview"><span class="fw-preview-label">预览：</span><span id="tunnel-preview-text">—</span></div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="form-group">
+        <label>协议</label>
+        <select id="tunnel-protocol">
+          <option value="tcp">TCP</option>
+          <option value="udp">UDP</option>
+          <option value="both">TCP+UDP</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>归属用户</label>
+        <select id="tunnel-user"><option value="0">不指定</option></select>
+      </div>
+      <div class="form-group">
+        <label>限速 Mbps</label>
+        <input type="number" id="tunnel-speed" min="0" placeholder="0=不限">
+      </div>
+    </div>
+    <p class="hint-text" style="margin-bottom:12px">建好隧道后，去「端口转发」页面往这条隧道里添加具体的端口映射。</p>
+    <button class="btn btn-primary btn-block" onclick="saveTunnel()">创建隧道</button>
   </div>
 </div>
 

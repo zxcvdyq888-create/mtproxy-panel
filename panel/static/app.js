@@ -12,6 +12,7 @@ const PAGE_TITLES = {
   security: '安全设置',
   nodes: '服务器',
   forward: '端口转发',
+  tunnel: '隧道管理',
 };
 
 const ICONS = {
@@ -734,6 +735,7 @@ switchTab = function(tab) {
   if (tab === 'nodes') loadNodes();
   if (tab === 'settings') loadSocks5Status();
   if (tab === 'forward') loadForward();
+  if (tab === 'tunnel') loadTunnels();
 };
 
 // ===== 编辑节点 =====
@@ -792,60 +794,151 @@ async function socks5SavePort() {
 
 // ===== 端口转发 =====
 let _forwardRules = [];
-let _forwardChains = [];
+let _forwardTunnels = [];
+let _fwNodesCache = [];
 
+// ============ 隧道管理 ============
+async function loadTunnels() {
+  try {
+    const [tunnels, nodes, users] = await Promise.all([
+      api('/api/forward/chains'),
+      api('/api/nodes').catch(() => []),
+      api('/api/users').catch(() => []),
+    ]);
+    _forwardTunnels = tunnels;
+    _fwNodesCache = nodes;
+    _allUsers = users;
+    renderTunnels();
+  } catch (e) {
+    toast('隧道数据加载失败', 'error');
+  }
+}
+
+function renderTunnels() {
+  const el = document.getElementById('tunnel-list');
+  if (!_forwardTunnels.length) {
+    el.innerHTML = '<p class="hint-text">暂无隧道，点右上角「新建隧道」创建第一条管道。</p>';
+    return;
+  }
+  el.innerHTML = '<div class="tunnel-grid">' + _forwardTunnels.map(c => {
+    const proto = (c.protocol || 'tcp').toUpperCase();
+    const nForwards = (c.rules || []).length;
+    const nRunning = (c.rules || []).filter(r => r.running).length;
+    return `
+    <div class="tunnel-card">
+      <div class="tunnel-card-head">
+        <b>${esc(c.name)}</b>
+        ${nForwards && nRunning === nForwards ? '<span class="badge on">畅通</span>'
+          : nRunning > 0 ? '<span class="badge danger">部分运行</span>'
+          : '<span class="badge off">无转发</span>'}
+      </div>
+      <div class="tunnel-path">
+        <span class="tunnel-node">${esc(c.in_node_name)}<span class="tunnel-sub">入口</span></span>
+        <span class="chain-arrow">→</span>
+        <span class="tunnel-node tunnel-target">${esc(c.out_node_name)}<span class="tunnel-sub">出口</span></span>
+      </div>
+      <div class="tunnel-meta">
+        <span class="tunnel-tag">${proto}</span>
+        ${c.user_name ? `<span class="tunnel-tag">👤 ${esc(c.user_name)}</span>` : ''}
+        ${c.speed_limit_mbps > 0 ? `<span class="tunnel-tag">⚡ ${c.speed_limit_mbps}M</span>` : ''}
+        <span class="tunnel-tag tunnel-tag-dim">📡 ${nRunning}/${nForwards} 转发运行中</span>
+      </div>
+      <div class="tunnel-actions">
+        <button class="btn btn-ghost btn-sm" onclick="deleteTunnel(${c.id})">删除</button>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+async function showAddTunnelModal() {
+  const [nodes, users] = await Promise.all([
+    api('/api/nodes').catch(() => []),
+    api('/api/users').catch(() => []),
+  ]);
+  _fwNodesCache = nodes;
+  const opt = nodes.map(n => `<option value="${n.id}">${esc(n.name)} (${esc(n.host)})</option>`).join('');
+  document.getElementById('tunnel-in-node').innerHTML = '<option value="0">本机</option>' + opt;
+  document.getElementById('tunnel-out-node').innerHTML = '<option value="0">本机</option>' + opt;
+  const usel = document.getElementById('tunnel-user');
+  usel.innerHTML = '<option value="0">不指定</option>' +
+    users.map(u => `<option value="${u.id}">${esc(u.remark || '用户'+u.id)}</option>`).join('');
+  document.getElementById('tunnel-name').value = '';
+  document.getElementById('tunnel-speed').value = '';
+  document.getElementById('tunnel-protocol').value = 'tcp';
+  const upd = () => {
+    const inSel = document.getElementById('tunnel-in-node');
+    const outSel = document.getElementById('tunnel-out-node');
+    const inName = inSel.options[inSel.selectedIndex]?.text?.split(' (')[0] || '本机';
+    const outName = outSel.options[outSel.selectedIndex]?.text?.split(' (')[0] || '本机';
+    document.getElementById('tunnel-preview-text').textContent = `${inName}  →  ${outName}`;
+  };
+  document.getElementById('tunnel-in-node').onchange = upd;
+  document.getElementById('tunnel-out-node').onchange = upd;
+  upd();
+  show(document.getElementById('modal-add-tunnel'));
+}
+
+async function saveTunnel() {
+  const body = {
+    name: document.getElementById('tunnel-name').value.trim(),
+    in_node_id: parseInt(document.getElementById('tunnel-in-node').value) || 0,
+    out_node_id: parseInt(document.getElementById('tunnel-out-node').value) || 0,
+    protocol: document.getElementById('tunnel-protocol').value,
+    user_id: parseInt(document.getElementById('tunnel-user').value) || 0,
+    speed_limit_mbps: parseInt(document.getElementById('tunnel-speed').value) || 0,
+  };
+  if (!body.name) { toast('隧道名称必填', 'error'); return; }
+  try {
+    await api('/api/forward/chains', {method: 'POST', body: JSON.stringify(body)});
+    closeModal('modal-add-tunnel');
+    toast('隧道已创建，去「端口转发」添加端口映射', 'success');
+    loadTunnels();
+  } catch (e) {
+    toast('创建失败: ' + e.message, 'error');
+  }
+}
+
+async function deleteTunnel(id) {
+  if (!confirm('删除这条隧道？其中的端口转发也会一并删除。')) return;
+  try {
+    await api(`/api/forward/chains/${id}`, {method: 'DELETE'});
+    toast('已删除', 'success');
+    loadTunnels();
+  } catch (e) {
+    toast('删除失败: ' + e.message, 'error');
+  }
+}
+
+// ============ 端口转发 ============
 async function loadForward() {
   try {
-    const [rules, chains] = await Promise.all([
+    const [rules, tunnels] = await Promise.all([
       api('/api/forward/rules'),
       api('/api/forward/chains'),
     ]);
     _forwardRules = rules;
-    _forwardChains = chains;
+    _forwardTunnels = tunnels;
     renderForwardRules();
-    renderForwardChains();
   } catch (e) {
     toast('转发数据加载失败', 'error');
   }
 }
 
-function renderForwardChains() {
-  const el = document.getElementById('chains-list');
-  if (!_forwardChains.length) {
-    el.innerHTML = '<p class="hint-text">暂无链路，点右上角"新建链路"创建。</p>';
-    return;
-  }
-  el.innerHTML = _forwardChains.map(c => {
-    const hops = c.rules.map((r, i) =>
-      `<span class="chain-hop">${esc(r.listen_node_name)}:${r.listen_port}</span>` +
-      (i < c.rules.length - 1 ? '<span class="chain-arrow">→</span>' : '')
-    ).join('');
-    const last = c.rules[c.rules.length - 1];
-    const tail = last ? `<span class="chain-arrow">→</span><span class="chain-hop chain-target">${esc(last.target_host)}:${last.target_port}</span>` : '';
-    const allRunning = c.rules.length > 0 && c.rules.every(r => r.running);
-    return `
-      <div class="chain-card">
-        <div class="chain-card-head">
-          <b>${esc(c.name)}</b>
-          ${allRunning ? '<span class="badge on">畅通</span>' : '<span class="badge danger">有中断</span>'}
-          <span style="flex:1"></span>
-          <button class="btn btn-ghost btn-sm" onclick="deleteChain(${c.id})">删除</button>
-        </div>
-        <div class="chain-path">${hops}${tail}</div>
-      </div>`;
-  }).join('');
-}
-
 function renderForwardRules() {
   const el = document.getElementById('forward-rules-list');
-  const single = _forwardRules.filter(r => !r.chain_id);
-  if (!single.length) {
-    el.innerHTML = '<p class="hint-text">暂无独立隧道，点右上角"添加隧道"创建。</p>';
+  if (!_forwardRules.length) {
+    el.innerHTML = '<p class="hint-text">暂无端口转发，点右上角「添加转发」创建。先去「隧道管理」建好隧道再来。</p>';
     return;
   }
-  el.innerHTML = '<div class="tunnel-grid">' + single.map(r => {
+  // 按隧道分组
+  const groups = {};
+  _forwardRules.forEach(r => {
+    const tid = r.chain_id || 0;
+    if (!groups[tid]) groups[tid] = [];
+    groups[tid].push(r);
+  });
+  const card = r => {
     const proto = (r.protocol || 'tcp').toUpperCase();
-    const protoColor = r.protocol === 'udp' ? '#7c3aed' : r.protocol === 'both' ? '#0d9488' : '#1d9ad8';
     return `
     <div class="tunnel-card">
       <div class="tunnel-card-head">
@@ -858,10 +951,9 @@ function renderForwardRules() {
         <span class="tunnel-node tunnel-target">${esc(r.target_host)}<b>:${r.target_port}</b></span>
       </div>
       <div class="tunnel-meta">
-        <span class="tunnel-tag" style="background:rgba(29,154,216,.1);color:${protoColor}">${proto}</span>
+        <span class="tunnel-tag">${proto}</span>
         ${r.user_name ? `<span class="tunnel-tag">👤 ${esc(r.user_name)}</span>` : ''}
-        ${r.speed_limit_mbps > 0 ? `<span class="tunnel-tag">⚡ ${r.speed_limit_mbps}M</span>` : '<span class="tunnel-tag tunnel-tag-dim">⚡ 不限速</span>'}
-        ${r.traffic_limit_gb > 0 ? `<span class="tunnel-tag">📦 ${r.traffic_limit_gb}G</span>` : ''}
+        ${r.speed_limit_mbps > 0 ? `<span class="tunnel-tag">⚡ ${r.speed_limit_mbps}M</span>` : ''}
       </div>
       <div class="tunnel-actions">
         ${r.running
@@ -870,73 +962,117 @@ function renderForwardRules() {
         <button class="btn btn-ghost btn-sm" onclick="deleteForwardRule(${r.id})">删除</button>
       </div>
     </div>`;
-  }).join('') + '</div>';
+  };
+  let html = '';
+  // 有隧道的分组
+  _forwardTunnels.forEach(tun => {
+    const rs = groups[tun.id] || [];
+    if (!rs.length) return;
+    html += `<div class="forward-group">
+      <div class="forward-group-head">🚇 ${esc(tun.name)}
+        <span class="hint-text">${esc(tun.in_node_name)} → ${esc(tun.out_node_name)}</span>
+      </div>
+      <div class="tunnel-grid">${rs.map(card).join('')}</div>
+    </div>`;
+  });
+  // 未分组的
+  const ungrouped = groups[0] || [];
+  if (ungrouped.length) {
+    html += `<div class="forward-group">
+      <div class="forward-group-head">📦 未归属隧道</div>
+      <div class="tunnel-grid">${ungrouped.map(card).join('')}</div>
+    </div>`;
+  }
+  el.innerHTML = html || '<p class="hint-text">暂无端口转发。</p>';
 }
 
-let _fwNodesCache = [];
 async function showAddForwardModal() {
+  if (!_forwardTunnels.length) {
+    try {
+      _forwardTunnels = await api('/api/forward/chains');
+    } catch (e) {}
+  }
+  if (!_forwardTunnels.length) {
+    toast('请先去「隧道管理」新建一条隧道', 'error');
+    return;
+  }
   const [nodes, users] = await Promise.all([
     api('/api/nodes').catch(() => []),
     api('/api/users').catch(() => []),
   ]);
   _fwNodesCache = nodes;
-  const sel = document.getElementById('fw-node');
-  const nodeLabel = n => `${esc(n.name)} (${esc(n.host)}) [${n.port_start||10000}-${n.port_end||20000}]`;
-  sel.innerHTML = '<option value="0">本机</option>' +
-    nodes.map(n => `<option value="${n.id}">${nodeLabel(n)}</option>`).join('');
-  sel.onchange = updateFwPreview;
-  const tsel = document.getElementById('fw-target-node');
-  tsel.innerHTML = '<option value="">手动填 IP / 域名</option>' +
-    nodes.map(n => `<option value="${n.id}">${esc(n.name)} (${esc(n.host)})</option>`).join('');
-  tsel.onchange = () => {
-    const nid = parseInt(tsel.value);
-    const n = _fwNodesCache.find(x => x.id === nid);
-    document.getElementById('fw-target-host').value = n ? (n.public_ip || n.host) : '';
-    updateFwPreview();
-  };
+  // 隧道选择
+  const tunSel = document.getElementById('fw-tunnel');
+  if (tunSel) {
+    tunSel.innerHTML = _forwardTunnels.map(c =>
+      `<option value="${c.id}">${esc(c.name)}（${esc(c.in_node_name)}→${esc(c.out_node_name)}）</option>`).join('');
+    tunSel.onchange = onForwardTunnelChange;
+  }
   const usel = document.getElementById('fw-user');
   usel.innerHTML = '<option value="0">不指定</option>' +
     users.map(u => `<option value="${u.id}">${esc(u.remark || '用户'+u.id)}</option>`).join('');
-  const csel = document.getElementById('fw-chain');
-  csel.innerHTML = '<option value="0">单条隧道</option>' +
-    _forwardChains.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  ['fw-name','fw-listen-port','fw-target-port','fw-target-host','fw-speed','fw-quota'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('fw-protocol').value = 'tcp';
-  // 实时预览
-  ['fw-node','fw-listen-port','fw-target-host','fw-target-port'].forEach(id => {
-    document.getElementById(id).oninput = updateFwPreview;
-    document.getElementById(id).onchange = updateFwPreview;
+  ['fw-name','fw-listen-port','fw-target-port','fw-target-host','fw-speed','fw-quota'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.value = '';
   });
-  updateFwPreview();
+  document.getElementById('fw-protocol').value = 'tcp';
+  ['fw-listen-port','fw-target-host','fw-target-port'].forEach(id => {
+    const e = document.getElementById(id);
+    if (e) { e.oninput = updateFwPreview; e.onchange = updateFwPreview; }
+  });
+  onForwardTunnelChange();
   show(document.getElementById('modal-add-forward'));
 }
 
+function onForwardTunnelChange() {
+  const tunSel = document.getElementById('fw-tunnel');
+  const tid = parseInt(tunSel.value);
+  const tun = _forwardTunnels.find(c => c.id === tid);
+  if (!tun) return;
+  // 监听机器锁定为隧道入口
+  const inName = tun.in_node_name || '本机';
+  document.getElementById('fw-node-label').textContent = `${inName}（隧道入口）`;
+  document.getElementById('fw-node').value = tun.in_node_id;
+  // 目标默认填隧道出口 IP
+  const outNode = _fwNodesCache.find(n => n.id === tun.out_node_id);
+  if (outNode) {
+    document.getElementById('fw-target-host').value = outNode.public_ip || outNode.host;
+  }
+  // 协议跟随隧道
+  if (tun.protocol) document.getElementById('fw-protocol').value = tun.protocol;
+  updateFwPreview();
+}
+
 function updateFwPreview() {
-  const nodeSel = document.getElementById('fw-node');
-  const nid = parseInt(nodeSel.value) || 0;
-  const nodeName = nodeSel.options[nodeSel.selectedIndex]?.text?.split(' (')[0] || '本机';
+  const tunSel = document.getElementById('fw-tunnel');
+  const tid = tunSel ? parseInt(tunSel.value) : 0;
+  const tun = _forwardTunnels.find(c => c.id === tid);
+  const inName = tun ? (tun.in_node_name || '本机') : '本机';
+  const inId = tun ? tun.in_node_id : 0;
   const lp = document.getElementById('fw-listen-port').value || '?';
   const th = document.getElementById('fw-target-host').value || '?';
   const tp = document.getElementById('fw-target-port').value || '?';
   let hint = '';
-  if (nid) {
-    const n = _fwNodesCache.find(x => x.id === nid);
+  if (inId) {
+    const n = _fwNodesCache.find(x => x.id === inId);
     const ps = n?.port_start || 10000, pe = n?.port_end || 20000;
     const lpNum = parseInt(lp);
     if (lp !== '?' && (lpNum < ps || lpNum > pe)) hint = ` ⚠️ 端口须在 ${ps}-${pe} 范围内`;
   }
   document.getElementById('fw-preview-text').textContent =
-    `${nodeName}:${lp}  →  ${th}:${tp}${hint}`;
+    `${inName}:${lp}  →  ${th}:${tp}${hint}`;
 }
 
 async function saveForwardRule() {
+  const tunSel = document.getElementById('fw-tunnel');
+  const tid = parseInt(tunSel.value);
+  const tun = _forwardTunnels.find(c => c.id === tid);
   const body = {
     name: document.getElementById('fw-name').value.trim(),
-    listen_node_id: parseInt(document.getElementById('fw-node').value),
+    listen_node_id: tun ? tun.in_node_id : 0,
     listen_port: parseInt(document.getElementById('fw-listen-port').value),
     target_host: document.getElementById('fw-target-host').value.trim(),
     target_port: parseInt(document.getElementById('fw-target-port').value),
-    chain_id: parseInt(document.getElementById('fw-chain').value),
+    chain_id: tid,
     protocol: document.getElementById('fw-protocol').value,
     user_id: parseInt(document.getElementById('fw-user').value) || 0,
     speed_limit_mbps: parseInt(document.getElementById('fw-speed').value) || 0,
@@ -949,7 +1085,7 @@ async function saveForwardRule() {
   try {
     await api('/api/forward/rules', {method: 'POST', body: JSON.stringify(body)});
     closeModal('modal-add-forward');
-    toast('转发规则已创建并启动', 'success');
+    toast('端口转发已创建并启动', 'success');
     loadForward();
   } catch (e) {
     toast('创建失败: ' + e.message, 'error');
@@ -967,7 +1103,7 @@ async function toggleForward(id, start) {
 }
 
 async function deleteForwardRule(id) {
-  if (!confirm('删除这条转发规则？')) return;
+  if (!confirm('删除这条端口转发？')) return;
   try {
     await api(`/api/forward/rules/${id}`, {method: 'DELETE'});
     toast('已删除', 'success');
@@ -977,31 +1113,3 @@ async function deleteForwardRule(id) {
   }
 }
 
-function showAddChainModal() {
-  document.getElementById('chain-name').value = '';
-  show(document.getElementById('modal-add-chain'));
-}
-
-async function saveForwardChain() {
-  const name = document.getElementById('chain-name').value.trim();
-  if (!name) { toast('链路名称必填', 'error'); return; }
-  try {
-    await api('/api/forward/chains', {method: 'POST', body: JSON.stringify({name})});
-    closeModal('modal-add-chain');
-    toast('链路已创建', 'success');
-    loadForward();
-  } catch (e) {
-    toast('创建失败: ' + e.message, 'error');
-  }
-}
-
-async function deleteChain(id) {
-  if (!confirm('删除整条链路（含其中所有转发规则）？')) return;
-  try {
-    await api(`/api/forward/chains/${id}`, {method: 'DELETE'});
-    toast('链路已删除', 'success');
-    loadForward();
-  } catch (e) {
-    toast('删除失败: ' + e.message, 'error');
-  }
-}
