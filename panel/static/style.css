@@ -976,3 +976,117 @@ input:focus, select:focus {
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 3px rgba(42, 171, 238, 0.12) !important;
 }
+
+/* ============ 密集信息卡片 ============ */
+#stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.dense-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.dense-wide { grid-column: span 4; }
+.dense-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+.dense-card-head b {
+  margin-left: auto;
+  font-size: 1.15rem;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.dense-icon {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+.dense-bar {
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.dense-bar-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.5s;
+}
+.dense-card-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.dense-proxy-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-top: 6px;
+}
+.dense-proxy-grid > div {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.dense-proxy-grid span {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.dense-proxy-grid b {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 900px) {
+  #stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .dense-wide { grid-column: span 2; }
+  .dense-proxy-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ============ 快捷操作 ============ */
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+}
+.qa-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--text);
+  font-weight: 600;
+  transition: all 0.2s;
+}
+.qa-btn:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.qa-icon {
+  width: 40px; height: 40px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  font-size: 1.2rem;
+}
+@media (max-width: 900px) {
+  .quick-actions { grid-template-columns: repeat(3, 1fr); }
+}

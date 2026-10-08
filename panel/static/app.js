@@ -174,37 +174,47 @@ function renderStats(data) {
   const { system: sys, proxy, stats } = data;
   const grid = document.getElementById('stats-grid');
 
+  const barHtml = (pct, color) => `
+    <div class="dense-bar"><div class="dense-bar-fill" style="width:${Math.min(pct,100)}%;background:${color}"></div></div>`;
+
   grid.innerHTML = `
-    ${donutHtml(sys.cpu_percent, `${sys.cpu_percent}%`, 'CPU', '处理器负载', 'var(--primary)')}
-    ${donutHtml(sys.memory_percent, `${sys.memory_percent}%`, '内存', `${sys.memory_used_gb} / ${sys.memory_total_gb} GB`, 'var(--warning)')}
-    ${donutHtml(sys.disk_percent, `${sys.disk_percent}%`, '磁盘', `剩余 ${sys.disk_free_gb} GB`, 'var(--purple)')}
-    ${donutHtml(
-      stats.total_users ? (stats.active_users / stats.total_users * 100) : 0,
-      `${stats.active_users}/${stats.total_users}`,
-      '活跃用户', stats.total_traffic_human, 'var(--success)'
-    )}
-    <div class="metric-card metric-wide">
-      <div class="donut" style="--pct:${proxy.connections > 0 ? Math.min(proxy.connections * 10, 100) : 0};--donut-color:var(--cyan)">
-        <span class="donut-value">${proxy.connections}</span>
+    <div class="dense-card">
+      <div class="dense-card-head"><span class="dense-icon" style="background:rgba(42,171,238,.12);color:#1d9ad8">⚙</span><span>CPU</span><b>${sys.cpu_percent}%</b></div>
+      ${barHtml(sys.cpu_percent, 'linear-gradient(90deg,#2aabee,#1d7fe0)')}
+      <div class="dense-card-sub">处理器负载 · ${sys.cpu_count || ''}核</div>
+    </div>
+    <div class="dense-card">
+      <div class="dense-card-head"><span class="dense-icon" style="background:rgba(245,158,11,.12);color:#d97706">▤</span><span>内存</span><b>${sys.memory_percent}%</b></div>
+      ${barHtml(sys.memory_percent, 'linear-gradient(90deg,#f59e0b,#d97706)')}
+      <div class="dense-card-sub">${sys.memory_used_gb} / ${sys.memory_total_gb} GB</div>
+    </div>
+    <div class="dense-card">
+      <div class="dense-card-head"><span class="dense-icon" style="background:rgba(168,85,247,.12);color:#7c3aed">◉</span><span>磁盘</span><b>${sys.disk_percent}%</b></div>
+      ${barHtml(sys.disk_percent, 'linear-gradient(90deg,#a855f7,#7c3aed)')}
+      <div class="dense-card-sub">剩余 ${sys.disk_free_gb} GB</div>
+    </div>
+    <div class="dense-card">
+      <div class="dense-card-head"><span class="dense-icon" style="background:rgba(34,197,94,.12);color:#16a34a">◈</span><span>用户</span><b>${stats.active_users}/${stats.total_users}</b></div>
+      ${barHtml(stats.total_users ? stats.active_users/stats.total_users*100 : 0, 'linear-gradient(90deg,#22c55e,#16a34a)')}
+      <div class="dense-card-sub">总流量 ${stats.total_traffic_human}</div>
+    </div>
+    <div class="dense-card dense-wide">
+      <div class="dense-card-head">
+        <span class="dense-icon" style="background:rgba(42,171,238,.12);color:#1d9ad8">⇄</span>
+        <span>代理状态</span>
+        ${proxy.running ? '<span class="badge on">运行中</span>' : '<span class="badge danger">已停止</span>'}
+        <span style="flex:1"></span>
+        <button class="btn btn-sm" onclick="showPage('proxy')">去设置</button>
       </div>
-      <div class="metric-body">
-        <div class="donut-label">在线连接</div>
-        <div style="font-size:1.1rem;font-weight:600;margin:4px 0">
-          ${proxy.running ? '<span class="badge on">代理运行中</span>' : '<span class="badge danger">代理已停止</span>'}
-        </div>
-        <div class="donut-sub">端口 ${proxy.port} · ${tlsLabel(proxy.fake_tls_mode)}</div>
+      <div class="dense-proxy-grid">
+        <div><span>在线连接</span><b>${proxy.connections}</b></div>
+        <div><span>端口</span><b>${proxy.port}</b></div>
+        <div><span>伪装域名</span><b style="font-size:.8rem">${esc(proxy.domain || '-')}</b></div>
+        <div><span>混淆</span><b>${tlsLabel(proxy.fake_tls_mode)}</b></div>
+        <div><span>公网IP</span><b style="font-size:.8rem">${esc(proxy.public_ip)}</b></div>
+        <div><span>SOCKS5</span><b>${proxy.socks5_running ? '运行中' : '未启用'}</b></div>
       </div>
     </div>
-  `;
-
-  document.getElementById('proxy-status-badge').innerHTML =
-    proxy.running ? '<span class="badge on">运行中</span>' : '<span class="badge danger">已停止</span>';
-
-  document.getElementById('proxy-info').innerHTML = `
-    <div class="proxy-info-item"><div class="label">公网 IP</div><div class="value">${esc(proxy.public_ip)}</div></div>
-    <div class="proxy-info-item"><div class="label">代理端口</div><div class="value">${proxy.port}</div></div>
-    <div class="proxy-info-item"><div class="label">伪装域名</div><div class="value">${esc(proxy.domain || '-')}</div></div>
-    <div class="proxy-info-item"><div class="label">混淆模式</div><div class="value">${tlsLabel(proxy.fake_tls_mode)}</div></div>
   `;
 
   const uc = document.getElementById('user-count');
