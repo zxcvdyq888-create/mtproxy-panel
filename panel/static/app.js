@@ -440,15 +440,34 @@ function closeModal(id, e) {
 
 function copyModalLink() { copyLink(modalLink); }
 
-function copyLink(link) {
-  navigator.clipboard.writeText(link).then(() => toast('链接已复制到剪贴板', 'success')).catch(() => {
+// 通用复制：优先 Clipboard API，HTTP 等非安全上下文降级到 execCommand
+function copyText(text) {
+  return new Promise((resolve, reject) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(resolve).catch(() => fallbackCopy(text) ? resolve() : reject());
+    } else {
+      fallbackCopy(text) ? resolve() : reject();
+    }
+  });
+}
+
+function fallbackCopy(text) {
+  try {
     const ta = document.createElement('textarea');
-    ta.value = link;
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
     document.body.appendChild(ta);
     ta.select();
-    document.execCommand('copy');
+    const ok = document.execCommand('copy');
     ta.remove();
-    toast('链接已复制', 'success');
+    return ok;
+  } catch (e) { return false; }
+}
+
+function copyLink(link) {
+  copyText(link).then(() => toast('链接已复制到剪贴板', 'success')).catch(() => {
+    toast('复制失败，请手动复制', 'error');
   });
 }
 
@@ -613,7 +632,7 @@ async function showAddNodeModal() {
 
 function copyInstallCmd() {
   const txt = document.getElementById('install-cmd-text').textContent;
-  navigator.clipboard.writeText(txt).then(() => toast('安装命令已复制', 'success'));
+  copyText(txt).then(() => toast('安装命令已复制', 'success')).catch(() => toast('复制失败，请手动复制', 'error'));
 }
 
 async function syncNode(id) {
@@ -634,7 +653,7 @@ async function copyNodeLinks(id) {
       } catch (e) { /* 跳过失败的 */ }
     }
     if (!links.length) { toast('没有可复制的链接', 'info'); return; }
-    await navigator.clipboard.writeText(links.join('\n'));
+    await copyText(links.join('\n'));
     toast(`已复制 ${links.length} 个链接`, 'success');
   } catch (e) { toast('复制失败', 'error'); }
 }
