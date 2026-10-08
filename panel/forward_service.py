@@ -42,23 +42,33 @@ def _ensure_socat() -> None:
 
 
 def forward_start(rule_id: int, listen_port: int, target_host: str,
-                  target_port: int) -> bool:
+                  target_port: int, protocol: str = "tcp") -> bool:
     """启动一条转发规则，返回是否成功。"""
     forward_stop(rule_id)
     try:
         _ensure_socat()
-        cmd = ["socat",
-               f"TCP4-LISTEN:{listen_port},fork,reuseaddr",
-               f"TCP4:{target_host}:{target_port}"]
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL)
-        _procs[rule_id] = proc
+        proto = (protocol or "tcp").lower()
+        procs = []
+        if proto in ("tcp", "both"):
+            cmd = ["socat",
+                   f"TCP4-LISTEN:{listen_port},fork,reuseaddr",
+                   f"TCP4:{target_host}:{target_port}"]
+            procs.append(subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                          stderr=subprocess.DEVNULL))
+        if proto in ("udp", "both"):
+            cmd = ["socat",
+                   f"UDP4-LISTEN:{listen_port},fork,reuseaddr",
+                   f"UDP4:{target_host}:{target_port}"]
+            procs.append(subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                                          stderr=subprocess.DEVNULL))
+        _procs[rule_id] = procs
         data = _load()
         data[str(rule_id)] = {
             "listen_port": listen_port,
             "target_host": target_host,
             "target_port": target_port,
-            "pid": proc.pid,
+            "protocol": proto,
+            "pids": [p.pid for p in procs],
         }
         _save(data)
         return True
@@ -68,16 +78,19 @@ def forward_start(rule_id: int, listen_port: int, target_host: str,
 
 def forward_stop(rule_id: int) -> None:
     """停止一条转发规则。"""
-    proc = _procs.pop(rule_id, None)
-    if proc and proc.poll() is None:
-        try:
-            proc.terminate()
-            proc.wait(timeout=5)
-        except Exception:
+    procs = _procs.pop(rule_id, None)
+    if not isinstance(procs, list):
+        procs = [procs] if procs else []
+    for proc in procs:
+        if proc and proc.poll() is None:
             try:
-                proc.kill()
+                proc.terminate()
+                proc.wait(timeout=5)
             except Exception:
-                pass
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
     data = _load()
     if str(rule_id) in data:
         del data[str(rule_id)]
@@ -89,6 +102,9 @@ def forward_status() -> Dict[str, Any]:
     data = _load()
     result = {}
     for rid, info in data.items():
-        proc = _procs.get(int(rid))
-        result[rid] = {"running": proc is not None and proc.poll() is None, **info}
+        procs = _procs.get(int(rid), [])
+        if not isinstance(procs, list):
+            procs = [procs]
+        alive = any(p is not None and p.poll() is None for p in procs)
+        result[rid] = {"running": alive, **info}
     return result

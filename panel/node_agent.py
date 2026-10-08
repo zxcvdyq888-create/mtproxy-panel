@@ -185,6 +185,7 @@ class ForwardRequest(BaseModel):
     listen_port: int
     target_host: str
     target_port: int
+    protocol: str = "tcp"
 
 def _socat_available() -> bool:
     try:
@@ -204,32 +205,44 @@ def forward_start(body: ForwardRequest, _: str = Depends(verify_node_token)) -> 
     _ensure_socat()
     # 先停掉同规则的旧进程
     forward_stop_raw(body.rule_id)
-    cmd = ["socat",
-           f"TCP4-LISTEN:{body.listen_port},fork,reuseaddr",
-           f"TCP4:{body.target_host}:{body.target_port}"]
-    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    _forward_procs[body.rule_id] = proc
+    proto = (body.protocol or "tcp").lower()
+    procs = []
+    if proto in ("tcp", "both"):
+        cmd = ["socat",
+               f"TCP4-LISTEN:{body.listen_port},fork,reuseaddr",
+               f"TCP4:{body.target_host}:{body.target_port}"]
+        procs.append(subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    if proto in ("udp", "both"):
+        cmd = ["socat",
+               f"UDP4-LISTEN:{body.listen_port},fork,reuseaddr",
+               f"UDP4:{body.target_host}:{body.target_port}"]
+        procs.append(subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+    _forward_procs[body.rule_id] = procs
     data = _load_forwards()
     data[str(body.rule_id)] = {
         "listen_port": body.listen_port,
         "target_host": body.target_host,
         "target_port": body.target_port,
-        "pid": proc.pid,
+        "protocol": proto,
+        "pids": [p.pid for p in procs],
     }
     _save_forwards(data)
-    return {"ok": True, "pid": proc.pid}
+    return {"ok": True, "pids": [p.pid for p in procs]}
 
 def forward_stop_raw(rule_id: int) -> None:
-    proc = _forward_procs.pop(rule_id, None)
-    if proc and proc.poll() is None:
-        try:
-            proc.terminate()
-            proc.wait(timeout=5)
-        except Exception:
+    procs = _forward_procs.pop(rule_id, None)
+    if not isinstance(procs, list):
+        procs = [procs] if procs else []
+    for proc in procs:
+        if proc and proc.poll() is None:
             try:
-                proc.kill()
+                proc.terminate()
+                proc.wait(timeout=5)
             except Exception:
-                pass
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
     data = _load_forwards()
     data.pop(str(rule_id), None)
     _save_forwards(data)
@@ -244,8 +257,9 @@ def forward_status(_: str = Depends(verify_node_token)) -> Dict[str, Any]:
     data = _load_forwards()
     result = {}
     for rid, info in data.items():
-        proc = _forward_procs.get(int(rid))
-        alive = proc is not None and proc.poll() is None
-        # 进程丢了但记录还在，尝试按端口检查
+        procs = _forward_procs.get(int(rid), [])
+        if not isinstance(procs, list):
+            procs = [procs]
+        alive = any(p is not None and p.poll() is None for p in procs)
         result[rid] = {"running": alive, **info}
     return {"forwards": result}

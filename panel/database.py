@@ -73,6 +73,10 @@ def init_db() -> None:
                 target_port INTEGER NOT NULL,
                 chain_id INTEGER NOT NULL DEFAULT 0,
                 chain_order INTEGER NOT NULL DEFAULT 0,
+                protocol TEXT NOT NULL DEFAULT 'tcp',
+                user_id INTEGER NOT NULL DEFAULT 0,
+                speed_limit_mbps INTEGER NOT NULL DEFAULT 0,
+                traffic_limit_gb REAL NOT NULL DEFAULT 0,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 running INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
@@ -87,6 +91,17 @@ def init_db() -> None:
             );
             """
         )
+        # 转发表补新字段（隧道化升级）
+        for _col, _def in [
+            ("protocol", "TEXT NOT NULL DEFAULT 'tcp'"),
+            ("user_id", "INTEGER NOT NULL DEFAULT 0"),
+            ("speed_limit_mbps", "INTEGER NOT NULL DEFAULT 0"),
+            ("traffic_limit_gb", "REAL NOT NULL DEFAULT 0"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE forward_rules ADD COLUMN {_col} {_def}")
+            except sqlite3.OperationalError:
+                pass
         # 存量库迁移：补 last_seen 列
         try:
             conn.execute("ALTER TABLE proxy_users ADD COLUMN last_seen TEXT")
@@ -454,15 +469,18 @@ def get_node_domain(node_id: int) -> str:
 # ============ 转发规则 ============
 def create_forward_rule(name: str, rule_type: str, listen_node_id: int, listen_port: int,
                        target_host: str, target_port: int, chain_id: int = 0,
-                       chain_order: int = 0) -> Dict[str, Any]:
+                       chain_order: int = 0, protocol: str = "tcp", user_id: int = 0,
+                       speed_limit_mbps: int = 0, traffic_limit_gb: float = 0) -> Dict[str, Any]:
     with get_conn() as conn:
         cur = conn.execute(
             """INSERT INTO forward_rules
                (name, rule_type, listen_node_id, listen_port, target_host, target_port,
-                chain_id, chain_order, enabled, running, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)""",
+                chain_id, chain_order, protocol, user_id, speed_limit_mbps,
+                traffic_limit_gb, enabled, running, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)""",
             (name, rule_type, listen_node_id, listen_port, target_host, target_port,
-             chain_id, chain_order, _utc_now()))
+             chain_id, chain_order, protocol, user_id, speed_limit_mbps,
+             traffic_limit_gb, _utc_now()))
         rid = cur.lastrowid
         conn.commit()
     return get_forward_rule(rid)
@@ -481,7 +499,8 @@ def list_forward_rules() -> list:
 
 def update_forward_rule(rule_id: int, **fields: Any) -> Optional[Dict[str, Any]]:
     allowed = {"name", "listen_node_id", "listen_port", "target_host", "target_port",
-               "enabled", "running", "chain_id", "chain_order"}
+               "enabled", "running", "chain_id", "chain_order", "protocol",
+               "user_id", "speed_limit_mbps", "traffic_limit_gb"}
     sets = {k: v for k, v in fields.items() if k in allowed}
     if not sets:
         return get_forward_rule(rule_id)

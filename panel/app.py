@@ -690,6 +690,10 @@ class ForwardRuleRequest(BaseModel):
     target_port: int = 0
     chain_id: int = 0
     chain_order: int = 0
+    protocol: str = "tcp"
+    user_id: int = 0
+    speed_limit_mbps: int = 0
+    traffic_limit_gb: float = 0
 
 class ForwardChainRequest(BaseModel):
     name: str = ""
@@ -707,12 +711,16 @@ def _forward_start_on_node(node: Optional[Dict[str, Any]], rule: Dict[str, Any])
         "listen_port": rule["listen_port"],
         "target_host": rule["target_host"],
         "target_port": rule["target_port"],
+        "protocol": rule.get("protocol", "tcp"),
     }
     if node is None:
         # 本机：直接调本地转发管理
         try:
             from forward_service import forward_start as local_start
-            return local_start(**data)
+            return local_start(
+                rule_id=data["rule_id"], listen_port=data["listen_port"],
+                target_host=data["target_host"], target_port=data["target_port"],
+                protocol=data.get("protocol", "tcp"))
         except Exception as e:
             logger.warning(f"本机转发启动失败: {e}")
             return False
@@ -735,9 +743,12 @@ def _forward_stop_on_node(node: Optional[Dict[str, Any]], rule_id: int) -> bool:
 def list_forward_rules(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
     rules = db.list_forward_rules()
     nodes = {n["id"]: n for n in db.list_nodes()}
+    users = {u["id"]: u for u in db.list_users()}
     for r in rules:
         nid = r["listen_node_id"]
         r["listen_node_name"] = "本机" if nid == 0 else nodes.get(nid, {}).get("name", "未知")
+        uid = r.get("user_id", 0)
+        r["user_name"] = users.get(uid, {}).get("remark", "") if uid else ""
     return rules
 
 @app.post("/api/forward/rules")
@@ -751,7 +762,9 @@ def create_forward_rule(body: ForwardRuleRequest, _: str = Depends(verify_token)
         rule_type=body.rule_type, listen_node_id=body.listen_node_id,
         listen_port=body.listen_port, target_host=body.target_host,
         target_port=body.target_port, chain_id=body.chain_id,
-        chain_order=body.chain_order)
+        chain_order=body.chain_order, protocol=body.protocol,
+        user_id=body.user_id, speed_limit_mbps=body.speed_limit_mbps,
+        traffic_limit_gb=body.traffic_limit_gb)
     # 自动启动
     node = _get_listen_node(rule)
     if _forward_start_on_node(node, rule):

@@ -1147,3 +1147,65 @@ input:focus, select:focus {
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
+
+/* ============ 隧道卡片 ============ */
+.tunnel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+.tunnel-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s;
+}
+.tunnel-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+  transform: translateY(-2px);
+}
+.tunnel-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.tunnel-card-head b { font-size: 1rem; flex: 1; }
+.tunnel-path {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.tunnel-node {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 0.85rem;
+}
+.tunnel-node b { font-variant-numeric: tabular-nums; }
+.tunnel-target { border-color: var(--accent); }
+.tunnel-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.tunnel-tag {
+  font-size: 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 4px 10px;
+  font-weight: 600;
+}
+.tunnel-tag-dim { color: var(--text-muted); }
+.tunnel-actions { display: flex; gap: 8px; }
+@media (max-width: 900px) {
+  .tunnel-grid { grid-template-columns: 1fr; }
+}

@@ -799,37 +799,56 @@ function renderForwardChains() {
 function renderForwardRules() {
   const el = document.getElementById('forward-rules-list');
   const single = _forwardRules.filter(r => !r.chain_id);
-  if (!_forwardRules.length) {
-    el.innerHTML = '<p class="hint-text">暂无转发规则，点右上角"添加转发"创建。</p>';
+  if (!single.length) {
+    el.innerHTML = '<p class="hint-text">暂无独立隧道，点右上角"添加隧道"创建。</p>';
     return;
   }
-  const row = r => `
-    <div class="forward-row">
-      <div class="forward-info">
+  el.innerHTML = '<div class="tunnel-grid">' + single.map(r => {
+    const proto = (r.protocol || 'tcp').toUpperCase();
+    const protoColor = r.protocol === 'udp' ? '#7c3aed' : r.protocol === 'both' ? '#0d9488' : '#1d9ad8';
+    return `
+    <div class="tunnel-card">
+      <div class="tunnel-card-head">
         <b>${esc(r.name)}</b>
-        <span class="forward-path">${esc(r.listen_node_name)}:${r.listen_port} → ${esc(r.target_host)}:${r.target_port}</span>
+        ${r.running ? '<span class="badge on">运行中</span>' : '<span class="badge off">已停止</span>'}
       </div>
-      ${r.running ? '<span class="badge on">运行中</span>' : '<span class="badge off">已停止</span>'}
-      <div class="action-group">
+      <div class="tunnel-path">
+        <span class="tunnel-node">${esc(r.listen_node_name)}<b>:${r.listen_port}</b></span>
+        <span class="chain-arrow">→</span>
+        <span class="tunnel-node tunnel-target">${esc(r.target_host)}<b>:${r.target_port}</b></span>
+      </div>
+      <div class="tunnel-meta">
+        <span class="tunnel-tag" style="background:rgba(29,154,216,.1);color:${protoColor}">${proto}</span>
+        ${r.user_name ? `<span class="tunnel-tag">👤 ${esc(r.user_name)}</span>` : ''}
+        ${r.speed_limit_mbps > 0 ? `<span class="tunnel-tag">⚡ ${r.speed_limit_mbps}M</span>` : '<span class="tunnel-tag tunnel-tag-dim">⚡ 不限速</span>'}
+        ${r.traffic_limit_gb > 0 ? `<span class="tunnel-tag">📦 ${r.traffic_limit_gb}G</span>` : ''}
+      </div>
+      <div class="tunnel-actions">
         ${r.running
-          ? `<button class="action-btn" onclick="toggleForward(${r.id}, false)" title="停止">⏹</button>`
-          : `<button class="action-btn" onclick="toggleForward(${r.id}, true)" title="启动">▶</button>`}
-        <button class="action-btn" onclick="deleteForwardRule(${r.id})" title="删除">${ICONS.delete}</button>
+          ? `<button class="btn btn-ghost btn-sm" onclick="toggleForward(${r.id}, false)">停止</button>`
+          : `<button class="btn btn-primary btn-sm" onclick="toggleForward(${r.id}, true)">启动</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="deleteForwardRule(${r.id})">删除</button>
       </div>
     </div>`;
-  el.innerHTML = single.map(row).join('') ||
-    '<p class="hint-text">单条规则都在链路里，见上方链路卡片。</p>';
+  }).join('') + '</div>';
 }
 
 async function showAddForwardModal() {
-  const nodes = await api('/api/nodes').catch(() => []);
+  const [nodes, users] = await Promise.all([
+    api('/api/nodes').catch(() => []),
+    api('/api/users').catch(() => []),
+  ]);
   const sel = document.getElementById('fw-node');
   sel.innerHTML = '<option value="0">本机</option>' +
     nodes.map(n => `<option value="${n.id}">${esc(n.name)} (${esc(n.host)})</option>`).join('');
+  const usel = document.getElementById('fw-user');
+  usel.innerHTML = '<option value="0">不指定</option>' +
+    users.map(u => `<option value="${u.id}">${esc(u.remark || '用户'+u.id)}</option>`).join('');
   const csel = document.getElementById('fw-chain');
   csel.innerHTML = '<option value="0">不归属链路（单条转发）</option>' +
     _forwardChains.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  ['fw-name','fw-listen-port','fw-target-port','fw-target-host'].forEach(id => document.getElementById(id).value = '');
+  ['fw-name','fw-listen-port','fw-target-port','fw-target-host','fw-speed','fw-quota'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('fw-protocol').value = 'tcp';
   show(document.getElementById('modal-add-forward'));
 }
 
@@ -841,6 +860,10 @@ async function saveForwardRule() {
     target_host: document.getElementById('fw-target-host').value.trim(),
     target_port: parseInt(document.getElementById('fw-target-port').value),
     chain_id: parseInt(document.getElementById('fw-chain').value),
+    protocol: document.getElementById('fw-protocol').value,
+    user_id: parseInt(document.getElementById('fw-user').value) || 0,
+    speed_limit_mbps: parseInt(document.getElementById('fw-speed').value) || 0,
+    traffic_limit_gb: parseFloat(document.getElementById('fw-quota').value) || 0,
   };
   if (!body.listen_port || !body.target_host || !body.target_port) {
     toast('监听端口、目标地址、目标端口必填', 'error');

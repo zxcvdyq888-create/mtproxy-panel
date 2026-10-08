@@ -319,7 +319,7 @@
             <h2>转发链路</h2>
             <div class="header-actions">
               <button class="btn btn-ghost btn-sm" onclick="showAddChainModal()">+ 新建链路</button>
-              <button class="btn btn-primary btn-sm" onclick="showAddForwardModal()">+ 添加转发</button>
+              <button class="btn btn-primary btn-sm" onclick="showAddForwardModal()">+ 添加隧道</button>
             </div>
           </div>
           <p class="hint-text" style="margin-bottom:16px">把机器串成转发链：客户 → 日本:8443 → 香港:9443 → 美国:32443。单条转发填一行，链路把多条规则按顺序串起来。</p>
@@ -377,7 +377,7 @@
 <div id="modal-add-forward" class="modal-overlay hidden" onclick="closeModal('modal-add-forward', event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>添加转发规则</h3>
+      <h3>添加隧道</h3>
       <button class="btn btn-icon" onclick="closeModal('modal-add-forward')">&times;</button>
     </div>
     <div class="form-group">
@@ -401,6 +401,30 @@
     <div class="form-group">
       <label>目标地址（IP 或域名）</label>
       <input type="text" id="fw-target-host" placeholder="如：1.2.3.4">
+    </div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div class="form-group">
+        <label>协议</label>
+        <select id="fw-protocol">
+          <option value="tcp">TCP</option>
+          <option value="udp">UDP</option>
+          <option value="both">TCP+UDP</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>归属用户（可选）</label>
+        <select id="fw-user"><option value="0">不指定</option></select>
+      </div>
+    </div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div class="form-group">
+        <label>限速 Mbps（0=不限）</label>
+        <input type="number" id="fw-speed" min="0" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>流量配额 GB（0=不限）</label>
+        <input type="number" id="fw-quota" min="0" placeholder="0">
+      </div>
     </div>
     <div class="form-group">
       <label>归属链路（可选）</label>
