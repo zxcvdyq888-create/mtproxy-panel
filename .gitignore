@@ -6,4 +6,5 @@ proxy/bin/
 proxy/pid/
 *.db
 *.log
+*.tar.gz
 .DS_Store

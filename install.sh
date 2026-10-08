@@ -111,11 +111,20 @@ echo "    面板已启动"
 
 # ---------- 6. 启动 MTProto 代理 ----------
 echo "==> [6/7] 启动 MTProto 代理（首次会下载代理核心，约 1 分钟）..."
-"${VENV_DIR}/bin/python" - <<'PYEOF'
-import sys
+# 全新安装时生成随机管理员密码，消除默认密码风险；升级安装不覆盖已有密码
+FRESH_INSTALL=0
+[[ ! -f "${DATA_DIR}/panel.db" ]] && FRESH_INSTALL=1
+if [[ "$FRESH_INSTALL" = 1 ]]; then
+  ADMIN_PASS="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 16)"
+  export ADMIN_PASS
+fi
+"${PYBIN}" - <<'PYEOF'
+import os, sys
 sys.path.insert(0, "/opt/mtproxy-panel/panel")
 import database as db
 db.init_db()
+if os.environ.get("ADMIN_PASS"):
+    db.update_admin("admin", os.environ["ADMIN_PASS"])
 from mtproxy_service import start_proxy
 ok = start_proxy()
 print("PROXY_STARTED" if ok else "PROXY_FAILED")
@@ -155,7 +164,13 @@ echo "=============================================="
 echo " MTProxy 管理面板安装完成"
 echo "=============================================="
 echo " 面板地址：http://${PUB_IP}:${PANEL_PORT}"
-echo " 默认账号：admin / admin123（登录后立即修改！）"
+if [[ -n "${ADMIN_PASS:-}" ]]; then
+  echo " 管理员账号：admin"
+  echo " 管理员密码：${ADMIN_PASS}"
+  echo " （随机生成，仅显示一次，请妥善保存）"
+else
+  echo " 管理员账号：沿用已有密码（升级安装未改动）"
+fi
 echo ""
 echo " 常用命令："
 echo "   mtproxy-panel status    查看状态"
