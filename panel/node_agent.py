@@ -162,3 +162,90 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("MTP_NODE_PORT", "8899"))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+# ============ 端口转发 ============
+import subprocess
+import signal
+
+FORWARD_FILE = DATA_DIR / "forwards.json"
+_forward_procs: Dict[int, subprocess.Popen] = {}
+
+def _load_forwards() -> Dict[str, Any]:
+    try:
+        return json.loads(FORWARD_FILE.read_text())
+    except Exception:
+        return {}
+
+def _save_forwards(data: Dict[str, Any]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    FORWARD_FILE.write_text(json.dumps(data))
+
+class ForwardRequest(BaseModel):
+    rule_id: int
+    listen_port: int
+    target_host: str
+    target_port: int
+
+def _socat_available() -> bool:
+    try:
+        subprocess.run(["socat", "-V"], capture_output=True, timeout=5)
+        return True
+    except Exception:
+        return False
+
+def _ensure_socat() -> None:
+    if not _socat_available():
+        subprocess.run(["apt-get", "update", "-qq"], capture_output=True, timeout=120)
+        subprocess.run(["apt-get", "install", "-y", "-qq", "socat"],
+                       capture_output=True, timeout=180)
+
+@app.post("/forward/start")
+def forward_start(body: ForwardRequest, _: str = Depends(verify_node_token)) -> Dict[str, Any]:
+    _ensure_socat()
+    # 先停掉同规则的旧进程
+    forward_stop_raw(body.rule_id)
+    cmd = ["socat",
+           f"TCP4-LISTEN:{body.listen_port},fork,reuseaddr",
+           f"TCP4:{body.target_host}:{body.target_port}"]
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    _forward_procs[body.rule_id] = proc
+    data = _load_forwards()
+    data[str(body.rule_id)] = {
+        "listen_port": body.listen_port,
+        "target_host": body.target_host,
+        "target_port": body.target_port,
+        "pid": proc.pid,
+    }
+    _save_forwards(data)
+    return {"ok": True, "pid": proc.pid}
+
+def forward_stop_raw(rule_id: int) -> None:
+    proc = _forward_procs.pop(rule_id, None)
+    if proc and proc.poll() is None:
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+    data = _load_forwards()
+    data.pop(str(rule_id), None)
+    _save_forwards(data)
+
+@app.post("/forward/stop")
+def forward_stop(body: Dict[str, int], _: str = Depends(verify_node_token)) -> Dict[str, Any]:
+    forward_stop_raw(body.get("rule_id", 0))
+    return {"ok": True}
+
+@app.get("/forward/status")
+def forward_status(_: str = Depends(verify_node_token)) -> Dict[str, Any]:
+    data = _load_forwards()
+    result = {}
+    for rid, info in data.items():
+        proc = _forward_procs.get(int(rid))
+        alive = proc is not None and proc.poll() is None
+        # 进程丢了但记录还在，尝试按端口检查
+        result[rid] = {"running": alive, **info}
+    return {"forwards": result}

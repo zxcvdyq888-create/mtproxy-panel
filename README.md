@@ -4,9 +4,13 @@
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
 [![Version](https://img.shields.io/badge/Version-2.1-green.svg)](CHANGELOG.md)
 
-> 发布日期：2026-10-08　|　当前版本：v2.4
+> 发布日期：2026-10-08　|　当前版本：v2.5
 
 Telegram MTProto 代理的多用户 Web 管理面板：用户密钥管理、流量配额、到期自动失效、Fake-TLS 混淆、二维码分享、系统监控、多服务器统一管理、SOCKS5 代理，一键脚本完成安装。
+
+## v2.5 更新内容（2026-10-08）
+
+- **端口转发**：转发链路（多机串成一条链）+ 单条转发规则，自助启停，socat 后台转发
 
 ## v2.4 更新内容（2026-10-08）
 
@@ -34,6 +38,10 @@ Telegram MTProto 代理的多用户 Web 管理面板：用户密钥管理、流�
 | 用户管理 | 代理设置 |
 |---|---|
 | ![用户管理](docs/preview/03-users.png) | ![代理设置](docs/preview/04-settings.png) |
+
+| 服务器 | 端口转发 |
+|---|---|
+| ![服务器](docs/preview/05-nodes.png) | ![端口转发](docs/preview/06-forward.png) |
 
 | 服务器管理 |
 |---|

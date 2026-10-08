@@ -73,13 +73,17 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01"/></svg>
         服务器
       </button>
+      <button class="nav-item" data-tab="forward" onclick="switchTab('forward')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3l4 4-4 4M21 7H8M7 21l-4-4 4-4M3 17h13"/></svg>
+        端口转发
+      </button>
     </nav>
     <div class="sidebar-footer">
       <button class="nav-item danger" onclick="logout()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
         退出登录
       </button>
-      <div class="version-tag">v2.4</div>
+      <div class="version-tag">v2.5</div>
     </div>
   </aside>
 
@@ -307,6 +311,23 @@
           <div class="node-grid" id="nodes-grid"></div>
         </div>
       </section>
+
+      <!-- 端口转发 -->
+      <section id="tab-forward" class="panel-section">
+        <div class="card">
+          <div class="card-header">
+            <h2>转发链路</h2>
+            <div class="header-actions">
+              <button class="btn btn-ghost btn-sm" onclick="showAddChainModal()">+ 新建链路</button>
+              <button class="btn btn-primary btn-sm" onclick="showAddForwardModal()">+ 添加转发</button>
+            </div>
+          </div>
+          <p class="hint-text" style="margin-bottom:16px">把机器串成转发链：客户 → 日本:8443 → 香港:9443 → 美国:32443。单条转发填一行，链路把多条规则按顺序串起来。</p>
+          <div id="chains-list" style="margin-bottom:20px"></div>
+          <h3 style="margin-bottom:12px;font-size:1rem">转发规则</h3>
+          <div id="forward-rules-list"></div>
+        </div>
+      </section>
     </div>
   </main>
 </div>
@@ -349,6 +370,59 @@
       <input type="text" id="edit-node-domain" placeholder="如：azure.microsoft.com">
     </div>
     <button class="btn btn-primary" onclick="saveNodeEdit()">保存</button>
+  </div>
+</div>
+
+<!-- 添加转发弹窗 -->
+<div id="modal-add-forward" class="modal-overlay hidden" onclick="closeModal('modal-add-forward', event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>添加转发规则</h3>
+      <button class="btn btn-icon" onclick="closeModal('modal-add-forward')">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>规则名称</label>
+      <input type="text" id="fw-name" placeholder="如：日本→香港">
+    </div>
+    <div class="form-group">
+      <label>监听机器</label>
+      <select id="fw-node"></select>
+    </div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div class="form-group">
+        <label>监听端口</label>
+        <input type="number" id="fw-listen-port" min="1" max="65535" placeholder="8443">
+      </div>
+      <div class="form-group">
+        <label>目标端口</label>
+        <input type="number" id="fw-target-port" min="1" max="65535" placeholder="9443">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>目标地址（IP 或域名）</label>
+      <input type="text" id="fw-target-host" placeholder="如：1.2.3.4">
+    </div>
+    <div class="form-group">
+      <label>归属链路（可选）</label>
+      <select id="fw-chain"><option value="0">不归属链路（单条转发）</option></select>
+    </div>
+    <button class="btn btn-primary" onclick="saveForwardRule()">保存并启动</button>
+  </div>
+</div>
+
+<!-- 新建链路弹窗 -->
+<div id="modal-add-chain" class="modal-overlay hidden" onclick="closeModal('modal-add-chain', event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>新建转发链路</h3>
+      <button class="btn btn-icon" onclick="closeModal('modal-add-chain')">&times;</button>
+    </div>
+    <div class="form-group">
+      <label>链路名称</label>
+      <input type="text" id="chain-name" placeholder="如：日本→香港→美国">
+    </div>
+    <p class="hint-text">建好链路后，添加转发规则时选择归属此链路，多条规则按顺序组成完整链条。</p>
+    <button class="btn btn-primary" onclick="saveForwardChain()">创建</button>
   </div>
 </div>
 

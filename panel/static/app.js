@@ -11,6 +11,7 @@ const PAGE_TITLES = {
   settings: '代理设置',
   security: '安全设置',
   nodes: '服务器',
+  forward: '端口转发',
 };
 
 const ICONS = {
@@ -692,6 +693,7 @@ switchTab = function(tab) {
   _origSwitchTab(tab);
   if (tab === 'nodes') loadNodes();
   if (tab === 'settings') loadSocks5Status();
+  if (tab === 'forward') loadForward();
 };
 
 // ===== 编辑节点 =====
@@ -746,4 +748,160 @@ async function socks5SavePort() {
     toast('端口已保存', 'success');
     loadSocks5Status();
   } catch (e) { toast('保存失败', 'error'); }
+}
+
+// ===== 端口转发 =====
+let _forwardRules = [];
+let _forwardChains = [];
+
+async function loadForward() {
+  try {
+    const [rules, chains] = await Promise.all([
+      api('/api/forward/rules'),
+      api('/api/forward/chains'),
+    ]);
+    _forwardRules = rules;
+    _forwardChains = chains;
+    renderForwardRules();
+    renderForwardChains();
+  } catch (e) {
+    toast('转发数据加载失败', 'error');
+  }
+}
+
+function renderForwardChains() {
+  const el = document.getElementById('chains-list');
+  if (!_forwardChains.length) {
+    el.innerHTML = '<p class="hint-text">暂无链路，点右上角"新建链路"创建。</p>';
+    return;
+  }
+  el.innerHTML = _forwardChains.map(c => {
+    const hops = c.rules.map((r, i) =>
+      `<span class="chain-hop">${esc(r.listen_node_name)}:${r.listen_port}</span>` +
+      (i < c.rules.length - 1 ? '<span class="chain-arrow">→</span>' : '')
+    ).join('');
+    const last = c.rules[c.rules.length - 1];
+    const tail = last ? `<span class="chain-arrow">→</span><span class="chain-hop chain-target">${esc(last.target_host)}:${last.target_port}</span>` : '';
+    const allRunning = c.rules.length > 0 && c.rules.every(r => r.running);
+    return `
+      <div class="chain-card">
+        <div class="chain-card-head">
+          <b>${esc(c.name)}</b>
+          ${allRunning ? '<span class="badge on">畅通</span>' : '<span class="badge danger">有中断</span>'}
+          <span style="flex:1"></span>
+          <button class="btn btn-ghost btn-sm" onclick="deleteChain(${c.id})">删除</button>
+        </div>
+        <div class="chain-path">${hops}${tail}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderForwardRules() {
+  const el = document.getElementById('forward-rules-list');
+  const single = _forwardRules.filter(r => !r.chain_id);
+  if (!_forwardRules.length) {
+    el.innerHTML = '<p class="hint-text">暂无转发规则，点右上角"添加转发"创建。</p>';
+    return;
+  }
+  const row = r => `
+    <div class="forward-row">
+      <div class="forward-info">
+        <b>${esc(r.name)}</b>
+        <span class="forward-path">${esc(r.listen_node_name)}:${r.listen_port} → ${esc(r.target_host)}:${r.target_port}</span>
+      </div>
+      ${r.running ? '<span class="badge on">运行中</span>' : '<span class="badge off">已停止</span>'}
+      <div class="action-group">
+        ${r.running
+          ? `<button class="action-btn" onclick="toggleForward(${r.id}, false)" title="停止">⏹</button>`
+          : `<button class="action-btn" onclick="toggleForward(${r.id}, true)" title="启动">▶</button>`}
+        <button class="action-btn" onclick="deleteForwardRule(${r.id})" title="删除">${ICONS.delete}</button>
+      </div>
+    </div>`;
+  el.innerHTML = single.map(row).join('') ||
+    '<p class="hint-text">单条规则都在链路里，见上方链路卡片。</p>';
+}
+
+async function showAddForwardModal() {
+  const nodes = await api('/api/nodes').catch(() => []);
+  const sel = document.getElementById('fw-node');
+  sel.innerHTML = '<option value="0">本机</option>' +
+    nodes.map(n => `<option value="${n.id}">${esc(n.name)} (${esc(n.host)})</option>`).join('');
+  const csel = document.getElementById('fw-chain');
+  csel.innerHTML = '<option value="0">不归属链路（单条转发）</option>' +
+    _forwardChains.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+  ['fw-name','fw-listen-port','fw-target-port','fw-target-host'].forEach(id => document.getElementById(id).value = '');
+  show(document.getElementById('modal-add-forward'));
+}
+
+async function saveForwardRule() {
+  const body = {
+    name: document.getElementById('fw-name').value.trim(),
+    listen_node_id: parseInt(document.getElementById('fw-node').value),
+    listen_port: parseInt(document.getElementById('fw-listen-port').value),
+    target_host: document.getElementById('fw-target-host').value.trim(),
+    target_port: parseInt(document.getElementById('fw-target-port').value),
+    chain_id: parseInt(document.getElementById('fw-chain').value),
+  };
+  if (!body.listen_port || !body.target_host || !body.target_port) {
+    toast('监听端口、目标地址、目标端口必填', 'error');
+    return;
+  }
+  try {
+    await api('/api/forward/rules', {method: 'POST', body: JSON.stringify(body)});
+    closeModal('modal-add-forward');
+    toast('转发规则已创建并启动', 'success');
+    loadForward();
+  } catch (e) {
+    toast('创建失败: ' + e.message, 'error');
+  }
+}
+
+async function toggleForward(id, start) {
+  try {
+    await api(`/api/forward/rules/${id}/${start ? 'start' : 'stop'}`, {method: 'POST'});
+    toast(start ? '转发已启动' : '转发已停止', 'success');
+    loadForward();
+  } catch (e) {
+    toast('操作失败: ' + e.message, 'error');
+  }
+}
+
+async function deleteForwardRule(id) {
+  if (!confirm('删除这条转发规则？')) return;
+  try {
+    await api(`/api/forward/rules/${id}`, {method: 'DELETE'});
+    toast('已删除', 'success');
+    loadForward();
+  } catch (e) {
+    toast('删除失败: ' + e.message, 'error');
+  }
+}
+
+function showAddChainModal() {
+  document.getElementById('chain-name').value = '';
+  show(document.getElementById('modal-add-chain'));
+}
+
+async function saveForwardChain() {
+  const name = document.getElementById('chain-name').value.trim();
+  if (!name) { toast('链路名称必填', 'error'); return; }
+  try {
+    await api('/api/forward/chains', {method: 'POST', body: JSON.stringify({name})});
+    closeModal('modal-add-chain');
+    toast('链路已创建', 'success');
+    loadForward();
+  } catch (e) {
+    toast('创建失败: ' + e.message, 'error');
+  }
+}
+
+async function deleteChain(id) {
+  if (!confirm('删除整条链路（含其中所有转发规则）？')) return;
+  try {
+    await api(`/api/forward/chains/${id}`, {method: 'DELETE'});
+    toast('链路已删除', 'success');
+    loadForward();
+  } catch (e) {
+    toast('删除失败: ' + e.message, 'error');
+  }
 }

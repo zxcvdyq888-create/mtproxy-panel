@@ -679,6 +679,147 @@ def add_node(body: NodeCreateRequest, _: str = Depends(verify_token)) -> Dict[st
     return node
 
 
+
+# ============ 端口转发 ============
+class ForwardRuleRequest(BaseModel):
+    name: str = ""
+    rule_type: str = "port"
+    listen_node_id: int = 0
+    listen_port: int = 0
+    target_host: str = ""
+    target_port: int = 0
+    chain_id: int = 0
+    chain_order: int = 0
+
+class ForwardChainRequest(BaseModel):
+    name: str = ""
+
+def _get_listen_node(rule: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """获取规则的监听节点。listen_node_id=0 表示本机。"""
+    if rule["listen_node_id"] == 0:
+        return None  # 本机特殊处理
+    return db.get_node(rule["listen_node_id"])
+
+def _forward_start_on_node(node: Optional[Dict[str, Any]], rule: Dict[str, Any]) -> bool:
+    """在指定节点上启动转发。node=None 表示本机。"""
+    data = {
+        "rule_id": rule["id"],
+        "listen_port": rule["listen_port"],
+        "target_host": rule["target_host"],
+        "target_port": rule["target_port"],
+    }
+    if node is None:
+        # 本机：直接调本地转发管理
+        try:
+            from forward_service import forward_start as local_start
+            return local_start(**data)
+        except Exception as e:
+            logger.warning(f"本机转发启动失败: {e}")
+            return False
+    result = _node_api_call(node, "/forward/start", method="POST", data=data, timeout=15)
+    return bool(result and result.get("ok"))
+
+def _forward_stop_on_node(node: Optional[Dict[str, Any]], rule_id: int) -> bool:
+    if node is None:
+        try:
+            from forward_service import forward_stop as local_stop
+            local_stop(rule_id)
+            return True
+        except Exception:
+            return False
+    result = _node_api_call(node, "/forward/stop", method="POST",
+                           data={"rule_id": rule_id}, timeout=10)
+    return bool(result and result.get("ok"))
+
+@app.get("/api/forward/rules")
+def list_forward_rules(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
+    rules = db.list_forward_rules()
+    nodes = {n["id"]: n for n in db.list_nodes()}
+    for r in rules:
+        nid = r["listen_node_id"]
+        r["listen_node_name"] = "本机" if nid == 0 else nodes.get(nid, {}).get("name", "未知")
+    return rules
+
+@app.post("/api/forward/rules")
+def create_forward_rule(body: ForwardRuleRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    if not body.listen_port or not body.target_host or not body.target_port:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "监听端口、目标地址、目标端口必填")
+    if body.listen_node_id != 0 and not db.get_node(body.listen_node_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "监听节点不存在")
+    rule = db.create_forward_rule(
+        name=body.name or f"{body.listen_port}→{body.target_host}:{body.target_port}",
+        rule_type=body.rule_type, listen_node_id=body.listen_node_id,
+        listen_port=body.listen_port, target_host=body.target_host,
+        target_port=body.target_port, chain_id=body.chain_id,
+        chain_order=body.chain_order)
+    # 自动启动
+    node = _get_listen_node(rule)
+    if _forward_start_on_node(node, rule):
+        db.update_forward_rule(rule["id"], running=1)
+        rule["running"] = 1
+    return rule
+
+@app.delete("/api/forward/rules/{rule_id}")
+def delete_forward_rule(rule_id: int, _: str = Depends(verify_token)) -> Dict[str, str]:
+    rule = db.get_forward_rule(rule_id)
+    if not rule:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "规则不存在")
+    node = _get_listen_node(rule)
+    _forward_stop_on_node(node, rule_id)
+    db.delete_forward_rule(rule_id)
+    return {"status": "ok"}
+
+@app.post("/api/forward/rules/{rule_id}/start")
+def start_forward_rule(rule_id: int, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    rule = db.get_forward_rule(rule_id)
+    if not rule:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "规则不存在")
+    node = _get_listen_node(rule)
+    if _forward_start_on_node(node, rule):
+        db.update_forward_rule(rule_id, running=1)
+        return {"status": "ok", "running": True}
+    raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "转发启动失败")
+
+@app.post("/api/forward/rules/{rule_id}/stop")
+def stop_forward_rule(rule_id: int, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    rule = db.get_forward_rule(rule_id)
+    if not rule:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "规则不存在")
+    node = _get_listen_node(rule)
+    _forward_stop_on_node(node, rule_id)
+    db.update_forward_rule(rule_id, running=0)
+    return {"status": "ok", "running": False}
+
+@app.get("/api/forward/chains")
+def list_forward_chains(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
+    chains = db.list_forward_chains()
+    rules = db.list_forward_rules()
+    nodes = {n["id"]: n for n in db.list_nodes()}
+    for c in chains:
+        c["rules"] = sorted(
+            [r for r in rules if r["chain_id"] == c["id"]],
+            key=lambda x: x["chain_order"])
+        for r in c["rules"]:
+            nid = r["listen_node_id"]
+            r["listen_node_name"] = "本机" if nid == 0 else nodes.get(nid, {}).get("name", "未知")
+    return chains
+
+@app.post("/api/forward/chains")
+def create_forward_chain(body: ForwardChainRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    if not body.name:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "链路名称必填")
+    return db.create_forward_chain(body.name)
+
+@app.delete("/api/forward/chains/{chain_id}")
+def delete_forward_chain(chain_id: int, _: str = Depends(verify_token)) -> Dict[str, str]:
+    rules = [r for r in db.list_forward_rules() if r["chain_id"] == chain_id]
+    for r in rules:
+        node = _get_listen_node(r)
+        _forward_stop_on_node(node, r["id"])
+    db.delete_forward_chain(chain_id)
+    return {"status": "ok"}
+
+
 @app.delete("/api/nodes/{node_id}")
 def remove_node(node_id: int, _: str = Depends(verify_token)) -> Dict[str, str]:
     if not db.delete_node(node_id):

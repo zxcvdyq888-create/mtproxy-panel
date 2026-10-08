@@ -62,6 +62,31 @@ def init_db() -> None:
             );
             """
         )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS forward_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL DEFAULT '',
+                rule_type TEXT NOT NULL DEFAULT 'port',
+                listen_node_id INTEGER NOT NULL DEFAULT 0,
+                listen_port INTEGER NOT NULL,
+                target_host TEXT NOT NULL DEFAULT '',
+                target_port INTEGER NOT NULL,
+                chain_id INTEGER NOT NULL DEFAULT 0,
+                chain_order INTEGER NOT NULL DEFAULT 0,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                running INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS forward_chains (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL
+            );
+            """
+        )
         # 存量库迁移：补 last_seen 列
         try:
             conn.execute("ALTER TABLE proxy_users ADD COLUMN last_seen TEXT")
@@ -425,3 +450,74 @@ def get_node_domain(node_id: int) -> str:
         except sqlite3.OperationalError:
             return ""
         return row["domain"] if row else ""
+
+# ============ 转发规则 ============
+def create_forward_rule(name: str, rule_type: str, listen_node_id: int, listen_port: int,
+                       target_host: str, target_port: int, chain_id: int = 0,
+                       chain_order: int = 0) -> Dict[str, Any]:
+    with get_conn() as conn:
+        cur = conn.execute(
+            """INSERT INTO forward_rules
+               (name, rule_type, listen_node_id, listen_port, target_host, target_port,
+                chain_id, chain_order, enabled, running, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)""",
+            (name, rule_type, listen_node_id, listen_port, target_host, target_port,
+             chain_id, chain_order, _utc_now()))
+        rid = cur.lastrowid
+        conn.commit()
+    return get_forward_rule(rid)
+
+def get_forward_rule(rule_id: int) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM forward_rules WHERE id=?", (rule_id,)).fetchone()
+        return dict(row) if row else None
+
+def list_forward_rules() -> list:
+    with get_conn() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM forward_rules ORDER BY chain_id, chain_order, id").fetchall()
+        return [dict(r) for r in rows]
+
+def update_forward_rule(rule_id: int, **fields: Any) -> Optional[Dict[str, Any]]:
+    allowed = {"name", "listen_node_id", "listen_port", "target_host", "target_port",
+               "enabled", "running", "chain_id", "chain_order"}
+    sets = {k: v for k, v in fields.items() if k in allowed}
+    if not sets:
+        return get_forward_rule(rule_id)
+    with get_conn() as conn:
+        conn.execute(
+            f"UPDATE forward_rules SET {', '.join(f'{k}=?' for k in sets)} WHERE id=?",
+            (*sets.values(), rule_id))
+        conn.commit()
+    return get_forward_rule(rule_id)
+
+def delete_forward_rule(rule_id: int) -> bool:
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM forward_rules WHERE id=?", (rule_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+def create_forward_chain(name: str) -> Dict[str, Any]:
+    with get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO forward_chains (name, created_at) VALUES (?, ?)",
+            (name, _utc_now()))
+        cid = cur.lastrowid
+        conn.commit()
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM forward_chains WHERE id=?", (cid,)).fetchone()
+        return dict(row)
+
+def list_forward_chains() -> list:
+    with get_conn() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM forward_chains ORDER BY id DESC").fetchall()
+        return [dict(r) for r in rows]
+
+def delete_forward_chain(chain_id: int) -> bool:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM forward_rules WHERE chain_id=?", (chain_id,))
+        cur = conn.execute("DELETE FROM forward_chains WHERE id=?", (chain_id,))
+        conn.commit()
+        return cur.rowcount > 0
