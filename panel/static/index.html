@@ -373,36 +373,62 @@
   </div>
 </div>
 
-<!-- 添加转发弹窗 -->
+<!-- 添加隧道弹窗 -->
 <div id="modal-add-forward" class="modal-overlay hidden" onclick="closeModal('modal-add-forward', event)">
-  <div class="modal" onclick="event.stopPropagation()">
+  <div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-header">
       <h3>添加隧道</h3>
       <button class="btn btn-icon" onclick="closeModal('modal-add-forward')">&times;</button>
     </div>
+
     <div class="form-group">
-      <label>规则名称</label>
-      <input type="text" id="fw-name" placeholder="如：日本→香港">
+      <label>隧道名称</label>
+      <input type="text" id="fw-name" placeholder="如：日本→香港专线">
     </div>
-    <div class="form-group">
-      <label>监听机器</label>
-      <select id="fw-node"></select>
-    </div>
-    <div class="form-grid" style="grid-template-columns:1fr 1fr">
-      <div class="form-group">
-        <label>监听端口</label>
-        <input type="number" id="fw-listen-port" min="1" max="65535" placeholder="8443">
+
+    <!-- 可视化转发流程 -->
+    <div class="fw-flow">
+      <div class="fw-step">
+        <div class="fw-step-title">① 从哪里来 <span class="fw-step-sub">客户连这里</span></div>
+        <div class="form-group">
+          <label>监听机器</label>
+          <div style="display:flex;gap:8px">
+            <select id="fw-node" style="flex:1"></select>
+            <button class="btn btn-ghost btn-sm" onclick="closeModal('modal-add-forward');switchTab('nodes')" title="去添加机器">+ 加机器</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>监听端口</label>
+          <input type="number" id="fw-listen-port" min="1" max="65535" placeholder="如：8443">
+        </div>
       </div>
-      <div class="form-group">
-        <label>目标端口</label>
-        <input type="number" id="fw-target-port" min="1" max="65535" placeholder="9443">
+      <div class="fw-arrow">↓<span>转发到</span>↓</div>
+      <div class="fw-step">
+        <div class="fw-step-title">② 到哪里去 <span class="fw-step-sub">流量送到这里</span></div>
+        <div class="form-group">
+          <label>目标机器（选机器自动填 IP）</label>
+          <select id="fw-target-node"><option value="">手动填 IP / 域名</option></select>
+        </div>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr">
+          <div class="form-group">
+            <label>目标地址</label>
+            <input type="text" id="fw-target-host" placeholder="如：1.2.3.4">
+          </div>
+          <div class="form-group">
+            <label>目标端口</label>
+            <input type="number" id="fw-target-port" min="1" max="65535" placeholder="如：9443">
+          </div>
+        </div>
       </div>
     </div>
-    <div class="form-group">
-      <label>目标地址（IP 或域名）</label>
-      <input type="text" id="fw-target-host" placeholder="如：1.2.3.4">
+
+    <!-- 实时预览 -->
+    <div class="fw-preview" id="fw-preview">
+      <span class="fw-preview-label">预览：</span>
+      <span id="fw-preview-text">—</span>
     </div>
-    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+
+    <div class="form-grid" style="grid-template-columns:1fr 1fr 1fr">
       <div class="form-group">
         <label>协议</label>
         <select id="fw-protocol">
@@ -412,25 +438,25 @@
         </select>
       </div>
       <div class="form-group">
-        <label>归属用户（可选）</label>
+        <label>归属用户</label>
         <select id="fw-user"><option value="0">不指定</option></select>
+      </div>
+      <div class="form-group">
+        <label>限速 Mbps</label>
+        <input type="number" id="fw-speed" min="0" placeholder="0=不限">
       </div>
     </div>
     <div class="form-grid" style="grid-template-columns:1fr 1fr">
       <div class="form-group">
-        <label>限速 Mbps（0=不限）</label>
-        <input type="number" id="fw-speed" min="0" placeholder="0">
+        <label>流量配额 GB</label>
+        <input type="number" id="fw-quota" min="0" placeholder="0=不限">
       </div>
       <div class="form-group">
-        <label>流量配额 GB（0=不限）</label>
-        <input type="number" id="fw-quota" min="0" placeholder="0">
+        <label>归属链路</label>
+        <select id="fw-chain"><option value="0">单条隧道</option></select>
       </div>
     </div>
-    <div class="form-group">
-      <label>归属链路（可选）</label>
-      <select id="fw-chain"><option value="0">不归属链路（单条转发）</option></select>
-    </div>
-    <button class="btn btn-primary" onclick="saveForwardRule()">保存并启动</button>
+    <button class="btn btn-primary btn-block" onclick="saveForwardRule()">保存并启动</button>
   </div>
 </div>
 

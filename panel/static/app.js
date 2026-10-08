@@ -833,23 +833,50 @@ function renderForwardRules() {
   }).join('') + '</div>';
 }
 
+let _fwNodesCache = [];
 async function showAddForwardModal() {
   const [nodes, users] = await Promise.all([
     api('/api/nodes').catch(() => []),
     api('/api/users').catch(() => []),
   ]);
+  _fwNodesCache = nodes;
   const sel = document.getElementById('fw-node');
   sel.innerHTML = '<option value="0">本机</option>' +
     nodes.map(n => `<option value="${n.id}">${esc(n.name)} (${esc(n.host)})</option>`).join('');
+  const tsel = document.getElementById('fw-target-node');
+  tsel.innerHTML = '<option value="">手动填 IP / 域名</option>' +
+    nodes.map(n => `<option value="${n.id}">${esc(n.name)} (${esc(n.host)})</option>`).join('');
+  tsel.onchange = () => {
+    const nid = parseInt(tsel.value);
+    const n = _fwNodesCache.find(x => x.id === nid);
+    document.getElementById('fw-target-host').value = n ? (n.public_ip || n.host) : '';
+    updateFwPreview();
+  };
   const usel = document.getElementById('fw-user');
   usel.innerHTML = '<option value="0">不指定</option>' +
     users.map(u => `<option value="${u.id}">${esc(u.remark || '用户'+u.id)}</option>`).join('');
   const csel = document.getElementById('fw-chain');
-  csel.innerHTML = '<option value="0">不归属链路（单条转发）</option>' +
+  csel.innerHTML = '<option value="0">单条隧道</option>' +
     _forwardChains.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
   ['fw-name','fw-listen-port','fw-target-port','fw-target-host','fw-speed','fw-quota'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('fw-protocol').value = 'tcp';
+  // 实时预览
+  ['fw-node','fw-listen-port','fw-target-host','fw-target-port'].forEach(id => {
+    document.getElementById(id).oninput = updateFwPreview;
+    document.getElementById(id).onchange = updateFwPreview;
+  });
+  updateFwPreview();
   show(document.getElementById('modal-add-forward'));
+}
+
+function updateFwPreview() {
+  const nodeSel = document.getElementById('fw-node');
+  const nodeName = nodeSel.options[nodeSel.selectedIndex]?.text?.split(' (')[0] || '本机';
+  const lp = document.getElementById('fw-listen-port').value || '?';
+  const th = document.getElementById('fw-target-host').value || '?';
+  const tp = document.getElementById('fw-target-port').value || '?';
+  document.getElementById('fw-preview-text').textContent =
+    `${nodeName}:${lp}  →  ${th}:${tp}`;
 }
 
 async function saveForwardRule() {
