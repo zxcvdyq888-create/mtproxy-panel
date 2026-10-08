@@ -80,6 +80,10 @@ def get_conn():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
+        # WAL: 读写并发不锁死；busy_timeout: 冲突时等待重试而不是直接报错
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=5000;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
         yield conn
         conn.commit()
     finally:
@@ -110,10 +114,9 @@ def get_all_settings() -> Dict[str, str]:
 
 
 def verify_admin(username: str, password: str) -> bool:
-    settings = get_all_settings()
-    if username != settings.get("admin_user", "admin"):
+    if username != get_setting("admin_user", "admin"):
         return False
-    stored = settings.get("admin_pass_hash", "")
+    stored = get_setting("admin_pass_hash", "")
     if not stored:
         return False
     return bcrypt.checkpw(password.encode(), stored.encode())

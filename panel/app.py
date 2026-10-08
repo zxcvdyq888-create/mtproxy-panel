@@ -2,14 +2,18 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
 import subprocess
 import threading
+import time
+import logging
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from typing import Any, Dict, List, Optional
 
 import jwt
 import qrcode
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import FileResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -31,9 +35,10 @@ from mtproxy_service import (
 from panel_service import apply_panel_port, is_port_available
 from system_monitor import get_system_status
 
-JWT_SECRET = os.getenv("MTP_PANEL_JWT_SECRET", "mtproxy-panel-secret-change-me")
 JWT_ALGO = "HS256"
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+
+logger = logging.getLogger("mtproxy-panel")
 
 app = FastAPI(title="MTProxy Panel", version="2.0.0")
 security = HTTPBearer(auto_error=False)
@@ -41,6 +46,48 @@ security = HTTPBearer(auto_error=False)
 _stats_thread: Optional[threading.Thread] = None
 _stats_stop = threading.Event()
 _proxy_needs_restart = False
+
+_jwt_secret: Optional[str] = None
+
+
+def get_jwt_secret() -> str:
+    """JWT 密钥：环境变量 > 数据库持久化 > 首次生成随机值。
+
+    原来没配环境变量就用硬编码默认值，谁都知道，能直接伪造 token。
+    """
+    global _jwt_secret
+    if _jwt_secret:
+        return _jwt_secret
+    env = os.getenv("MTP_PANEL_JWT_SECRET") or os.getenv("MTP_JWT_SECRET")
+    if env:
+        _jwt_secret = env
+        return env
+    stored = db.get_setting("jwt_secret", "")
+    if not stored:
+        stored = secrets.token_hex(32)
+        db.set_setting("jwt_secret", stored)
+    _jwt_secret = stored
+    return stored
+
+
+# 登录限流：单 IP 60 秒内最多 5 次失败
+_login_hits: Dict[str, List[float]] = {}
+_LOGIN_MAX = 5
+_LOGIN_WINDOW = 60.0
+
+
+def _login_allowed(ip: str) -> bool:
+    now = time.monotonic()
+    hits = [t for t in _login_hits.get(ip, []) if now - t < _LOGIN_WINDOW]
+    _login_hits[ip] = hits
+    return len(hits) < _LOGIN_MAX
+
+
+def _login_record(ip: str, ok: bool) -> None:
+    if ok:
+        _login_hits.pop(ip, None)
+    else:
+        _login_hits.setdefault(ip, []).append(time.monotonic())
 
 
 class LoginRequest(BaseModel):
@@ -79,7 +126,7 @@ class AdminUpdateRequest(BaseModel):
 
 def create_token(username: str) -> str:
     payload = {"sub": username, "exp": datetime.now(timezone.utc) + timedelta(days=7)}
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+    return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGO)
 
 
 def verify_token(
@@ -88,7 +135,7 @@ def verify_token(
     if not creds or creds.scheme.lower() != "bearer":
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "未登录")
     try:
-        return jwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGO])["sub"]
+        return jwt.decode(creds.credentials, get_jwt_secret(), algorithms=[JWT_ALGO])["sub"]
     except jwt.PyJWTError:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "登录已过期")
 
@@ -195,7 +242,7 @@ def _stats_collector_loop() -> None:
                 restart_proxy()
                 _proxy_needs_restart = False
         except Exception:
-            pass
+            logger.exception("stats collector 出错")
         _stats_stop.wait(15)
 
 
@@ -219,9 +266,14 @@ def index() -> FileResponse:
 
 
 @app.post("/api/auth/login")
-def login(body: LoginRequest) -> Dict[str, str]:
+def login(body: LoginRequest, request: Request) -> Dict[str, str]:
+    ip = request.client.host if request.client else "unknown"
+    if not _login_allowed(ip):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "尝试次数过多，请稍后再试")
     if not db.verify_admin(body.username, body.password):
+        _login_record(ip, False)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "用户名或密码错误")
+    _login_record(ip, True)
     return {"token": create_token(body.username), "username": body.username}
 
 
@@ -260,15 +312,23 @@ def get_users(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
 
 
 @app.post("/api/users")
-def add_user(body: UserCreateRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
+def add_user(
+    body: UserCreateRequest,
+    background_tasks: BackgroundTasks,
+    _: str = Depends(verify_token),
+) -> Dict[str, Any]:
     user = db.create_user(body.remark, body.traffic_limit_gb, body.expires_days)
-    restart_proxy()
+    # 代理重启约 3 秒，放后台，不阻塞接口返回
+    background_tasks.add_task(restart_proxy)
     return user_to_response(user, db.get_all_settings(), get_online_user_ids())
 
 
 @app.put("/api/users/{user_id}")
 def edit_user(
-    user_id: int, body: UserUpdateRequest, _: str = Depends(verify_token)
+    user_id: int,
+    body: UserUpdateRequest,
+    background_tasks: BackgroundTasks,
+    _: str = Depends(verify_token),
 ) -> Dict[str, Any]:
     fields: Dict[str, Any] = {}
     if body.remark is not None:
@@ -290,15 +350,17 @@ def edit_user(
     user = db.update_user(user_id, **fields)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
-    restart_proxy()
+    background_tasks.add_task(restart_proxy)
     return user_to_response(user, db.get_all_settings(), get_online_user_ids())
 
 
 @app.delete("/api/users/{user_id}")
-def remove_user(user_id: int, _: str = Depends(verify_token)) -> Dict[str, str]:
+def remove_user(
+    user_id: int, background_tasks: BackgroundTasks, _: str = Depends(verify_token)
+) -> Dict[str, str]:
     if not db.delete_user(user_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
-    restart_proxy()
+    background_tasks.add_task(restart_proxy)
     return {"status": "ok"}
 
 
@@ -308,7 +370,6 @@ def user_qrcode(user_id: int, _: str = Depends(verify_token)) -> Response:
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
     info = user_to_response(user, db.get_all_settings(), get_online_user_ids())
-    from io import BytesIO
 
     buf = BytesIO()
     qrcode.make(info["tg_link"]).save(buf, format="PNG")
@@ -331,7 +392,9 @@ def get_settings(_: str = Depends(verify_token)) -> Dict[str, Any]:
 
 @app.put("/api/settings")
 def update_settings(
-    body: SettingsUpdateRequest, _: str = Depends(verify_token)
+    body: SettingsUpdateRequest,
+    background_tasks: BackgroundTasks,
+    _: str = Depends(verify_token),
 ) -> Dict[str, str]:
     messages = []
     old_panel_port = int(db.get_setting("panel_port", "8088"))
@@ -364,10 +427,16 @@ def update_settings(
         db.set_setting("adtag", body.adtag)
 
     if body.public_ip is not None:
-        db.set_setting("public_ip", body.public_ip)
+        if body.public_ip:
+            import ipaddress
+            try:
+                ipaddress.IPv4Address(body.public_ip.strip())
+            except ValueError:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "只支持 IPv4 地址")
+        db.set_setting("public_ip", body.public_ip.strip() if body.public_ip else "")
 
-    restart_proxy()
-    messages.append("代理已重启")
+    background_tasks.add_task(restart_proxy)
+    messages.append("代理正在后台重启")
 
     new_panel_port = int(db.get_setting("panel_port", "8088"))
     if body.panel_port is not None and new_panel_port != old_panel_port:
