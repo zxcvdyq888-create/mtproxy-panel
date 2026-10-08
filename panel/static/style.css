@@ -765,12 +765,8 @@ body {
 
 /* ============ 质感升级 v2.4 ============ */
 
-/* 更深邃的背景 + 微妙渐变 */
+/* 新增变量（不覆盖原有主题变量） */
 :root {
-  --bg: #070b12;
-  --bg-elevated: #0c1220;
-  --surface: #101828;
-  --surface-2: #152032;
   --accent-gradient: linear-gradient(135deg, #2aabee 0%, #1d7fe0 100%);
   --glow: 0 0 24px rgba(42, 171, 238, 0.25);
 }
@@ -906,4 +902,77 @@ input:focus, select:focus {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(42, 171, 238, 0.4);
+}
+
+/* ============ 白色主题质感 ============ */
+[data-theme="light"] {
+  --bg: #f0f4f8;
+  --accent-gradient: linear-gradient(135deg, #2aabee 0%, #1d7fe0 100%);
+}
+
+[data-theme="light"] body {
+  background: linear-gradient(180deg, #f0f4f8 0%, #e8eef4 100%);
+}
+
+[data-theme="light"] .card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 40, 70, 0.08);
+  box-shadow: 0 2px 16px rgba(15, 40, 70, 0.06), 0 1px 3px rgba(15, 40, 70, 0.04);
+}
+
+[data-theme="light"] .card:hover {
+  border-color: rgba(42, 171, 238, 0.3);
+  box-shadow: 0 8px 28px rgba(42, 171, 238, 0.12), 0 2px 8px rgba(15, 40, 70, 0.06);
+  transform: translateY(-2px);
+}
+
+[data-theme="light"] .sidebar {
+  background: #ffffff;
+  border-right: 1px solid rgba(15, 40, 70, 0.08);
+  box-shadow: 2px 0 16px rgba(15, 40, 70, 0.04);
+}
+
+[data-theme="light"] .nav-item.active {
+  background: linear-gradient(135deg, rgba(42, 171, 238, 0.14) 0%, rgba(42, 171, 238, 0.06) 100%);
+  border: 1px solid rgba(42, 171, 238, 0.25);
+  color: #0c6aa8;
+  font-weight: 600;
+  box-shadow: 0 2px 12px rgba(42, 171, 238, 0.15);
+}
+
+[data-theme="light"] .nav-item.active::before {
+  box-shadow: 0 0 8px rgba(42, 171, 238, 0.5);
+}
+
+[data-theme="light"] .topbar {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(15, 40, 70, 0.08);
+}
+
+[data-theme="light"] .btn-primary {
+  box-shadow: 0 4px 14px rgba(42, 171, 238, 0.35);
+}
+
+[data-theme="light"] .donut {
+  filter: drop-shadow(0 2px 6px rgba(42, 171, 238, 0.2));
+}
+
+[data-theme="light"] tbody tr:hover {
+  background: rgba(42, 171, 238, 0.05);
+}
+
+[data-theme="light"] .hero-banner {
+  box-shadow: 0 8px 32px rgba(42, 171, 238, 0.15);
+}
+
+[data-theme="light"] input, [data-theme="light"] select {
+  background: #f8fafc;
+  border: 1px solid rgba(15, 40, 70, 0.1);
+}
+
+[data-theme="light"] input:focus, [data-theme="light"] select:focus {
+  background: #ffffff;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(42, 171, 238, 0.12) !important;
 }

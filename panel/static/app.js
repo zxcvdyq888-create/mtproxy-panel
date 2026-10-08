@@ -546,12 +546,12 @@ function applyTheme(theme) {
 }
 
 function toggleTheme() {
-  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  const cur = document.documentElement.getAttribute('data-theme') || 'light';
   applyTheme(cur === 'dark' ? 'light' : 'dark');
   toast('已切换主题', 'info');
 }
 
-const savedTheme = localStorage.getItem('mtp_theme') || 'dark';
+const savedTheme = localStorage.getItem('mtp_theme') || 'light';
 document.documentElement.setAttribute('data-theme', savedTheme);
 if (document.getElementById('icon-moon')) {
   document.getElementById('icon-moon').classList.toggle('hidden', savedTheme === 'light');
