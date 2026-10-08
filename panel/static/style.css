@@ -762,3 +762,148 @@ body {
   font-size: 12px;
   user-select: all;
 }
+
+/* ============ 质感升级 v2.4 ============ */
+
+/* 更深邃的背景 + 微妙渐变 */
+:root {
+  --bg: #070b12;
+  --bg-elevated: #0c1220;
+  --surface: #101828;
+  --surface-2: #152032;
+  --accent-gradient: linear-gradient(135deg, #2aabee 0%, #1d7fe0 100%);
+  --glow: 0 0 24px rgba(42, 171, 238, 0.25);
+}
+
+/* 卡片：玻璃拟态 + 渐变描边 */
+.card {
+  background: linear-gradient(160deg, rgba(21, 32, 50, 0.9) 0%, rgba(12, 18, 32, 0.95) 100%);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
+}
+
+.card:hover {
+  border-color: rgba(42, 171, 238, 0.25);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 20px rgba(42, 171, 238, 0.08);
+}
+
+[data-theme="light"] .card {
+  background: linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 4px 20px rgba(15, 35, 60, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+/* 数字指标：更大更粗 */
+.donut-value {
+  font-size: 26px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.5px;
+}
+
+/* 按钮：渐变 + 光晕 */
+.btn-primary {
+  background: var(--accent-gradient);
+  box-shadow: 0 4px 16px rgba(42, 171, 238, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border: none;
+  font-weight: 600;
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(42, 171, 238, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* 徽章：发光效果 */
+.badge.success {
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
+}
+
+.badge.danger {
+  box-shadow: 0 0 12px rgba(240, 82, 82, 0.3);
+}
+
+/* 侧边栏：更精致 */
+.sidebar {
+  background: linear-gradient(180deg, #0a0f1a 0%, #070b12 100%);
+  border-right: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.nav-item {
+  border-radius: 12px;
+  transition: all var(--transition);
+  position: relative;
+}
+
+.nav-item.active {
+  background: linear-gradient(135deg, rgba(42, 171, 238, 0.18) 0%, rgba(42, 171, 238, 0.08) 100%);
+  border: 1px solid rgba(42, 171, 238, 0.25);
+  box-shadow: var(--glow);
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 24px;
+  background: var(--accent-gradient);
+  border-radius: 0 3px 3px 0;
+  box-shadow: var(--glow);
+}
+
+/* 表格行：悬停高亮 */
+tbody tr {
+  transition: background var(--transition);
+}
+
+tbody tr:hover {
+  background: rgba(42, 171, 238, 0.06);
+}
+
+/* 输入框：聚焦光晕 */
+input:focus, select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px rgba(42, 171, 238, 0.15) !important;
+  outline: none;
+}
+
+/* 环形图：发光 */
+.donut {
+  filter: drop-shadow(0 0 8px rgba(42, 171, 238, 0.25));
+}
+
+/* 节点卡片：悬停上浮 */
+.node-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(42, 171, 238, 0.3);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 24px rgba(42, 171, 238, 0.1);
+}
+
+/* 页面切换动画 */
+.fade-in {
+  animation: fadeSlideIn 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 滚动条美化 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(42, 171, 238, 0.4);
+}
