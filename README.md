@@ -95,6 +95,24 @@ Telegram 客户端 ──► 代理 :443 ─────────────
 
 共 15 个 REST 接口，均需 `Authorization: Bearer <token>`（登录接口除外）。
 
+## API 接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| POST | `/api/auth/login` | 登录，返回 JWT（7 天有效） |
+| GET | `/api/dashboard` | 仪表盘：系统状态 + 代理状态 + 用户汇总 |
+| GET | `/api/users` | 用户列表（含流量、在线状态） |
+| POST | `/api/users` | 添加用户（备注 / 配额 / 有效天数） |
+| PUT | `/api/users/{id}` | 编辑用户 |
+| DELETE | `/api/users/{id}` | 删除用户 |
+| GET | `/api/users/{id}/qrcode` | 用户二维码（PNG） |
+| GET | `/api/settings` | 读取配置 |
+| PUT | `/api/settings` | 更新配置（端口 / 域名 / TLS / adtag） |
+| PUT | `/api/settings/admin` | 修改管理员账号密码 |
+| POST | `/api/proxy/start` | 启动代理 |
+| POST | `/api/proxy/stop` | 停止代理 |
+| POST | `/api/proxy/restart` | 重启代理 |
+
 ## 常见问题
 
 **Q: 忘记管理员密码？**
