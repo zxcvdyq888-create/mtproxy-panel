@@ -10,6 +10,7 @@ const PAGE_TITLES = {
   users: '用户管理',
   settings: '代理设置',
   security: '安全设置',
+  nodes: '服务器',
 };
 
 const ICONS = {
@@ -532,3 +533,123 @@ if (document.getElementById('icon-moon')) {
 // ===== 初始化 =====
 document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 if (token) showApp();
+// ===== 服务器节点管理 =====
+let _allNodes = [];
+
+async function loadNodes() {
+  try {
+    _allNodes = await api('/api/nodes');
+    renderNodes();
+  } catch (e) { console.error('加载节点失败', e); }
+}
+
+function renderNodes() {
+  const grid = document.getElementById('nodes-grid');
+  const countEl = document.getElementById('node-count');
+  // 本地节点 + 远程节点
+  const total = _allNodes.length + 1;
+  countEl.textContent = total + ' 台服务器';
+
+  let html = `
+    <div class="node-card node-local">
+      <div class="node-card-header">
+        <div>
+          <div class="node-name">本机 <span class="badge success">本地</span></div>
+          <div class="node-ip">${dashboardData.proxy.public_ip || '-'} : ${dashboardData.proxy.port || 443}</div>
+        </div>
+        <span class="badge ${dashboardData.proxy.running ? 'success' : 'danger'}">${dashboardData.proxy.running ? '运行中' : '已停止'}</span>
+      </div>
+      <div class="node-stats">
+        <div><div class="stat-label">CPU</div>${Math.round(dashboardData.system.cpu_percent || 0)}%</div>
+        <div><div class="stat-label">内存</div>${Math.round(dashboardData.system.mem_percent || 0)}%</div>
+        <div><div class="stat-label">用户</div>${dashboardData.users ? dashboardData.users.length : 0}</div>
+        <div><div class="stat-label">连接</div>${dashboardData.proxy.connections || 0}</div>
+      </div>
+    </div>`;
+
+  for (const n of _allNodes) {
+    const online = n.status === 'online';
+    const lastSeen = n.last_seen ? formatLastSeen(n.last_seen) : '从未连接';
+    html += `
+    <div class="node-card ${online ? '' : 'node-offline'}">
+      <div class="node-card-header">
+        <div>
+          <div class="node-name">${escapeHtml(n.name)}</div>
+          <div class="node-ip">${escapeHtml(n.public_ip || n.host)} : ${n.proxy_port}</div>
+        </div>
+        <span class="badge ${online ? 'success' : 'danger'}">${online ? '在线' : '离线'}</span>
+      </div>
+      <div class="node-stats">
+        <div><div class="stat-label">CPU</div>${online ? Math.round(n.cpu_percent || 0) + '%' : '-'}</div>
+        <div><div class="stat-label">内存</div>${online ? Math.round(n.mem_percent || 0) + '%' : '-'}</div>
+        <div><div class="stat-label">代理</div>${online ? (n.proxy_running ? '运行中' : '已停止') : '-'}</div>
+        <div><div class="stat-label">最后在线</div>${lastSeen}</div>
+      </div>
+      <div class="node-card-actions">
+        <button class="btn btn-ghost btn-sm" onclick="syncNode(${n.id})" ${online ? '' : 'disabled'}>同步用户</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyNodeLinks(${n.id})" ${online ? '' : 'disabled'}>复制链接</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteNode(${n.id}, '${escapeHtml(n.name)}')">删除</button>
+      </div>
+    </div>`;
+  }
+
+  if (!_allNodes.length) {
+    html += '<div class="empty-state">暂无远程服务器，点右上角添加</div>';
+  }
+  grid.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function showAddNodeModal() {
+  try {
+    const data = await api('/api/nodes/install-command');
+    document.getElementById('install-cmd-text').textContent = data.command;
+    show(document.getElementById('modal-add-node'));
+  } catch (e) { toast('获取安装命令失败', 'error'); }
+}
+
+function copyInstallCmd() {
+  const txt = document.getElementById('install-cmd-text').textContent;
+  navigator.clipboard.writeText(txt).then(() => toast('安装命令已复制', 'success'));
+}
+
+async function syncNode(id) {
+  try {
+    const data = await api(`/api/nodes/${id}/sync`, { method: 'POST' });
+    toast(data.status === 'ok' ? '用户已同步到节点' : '同步失败', data.status === 'ok' ? 'success' : 'error');
+  } catch (e) { toast('同步失败', 'error'); }
+}
+
+async function copyNodeLinks(id) {
+  // 复制该节点上所有用户的 tg 链接
+  try {
+    const links = [];
+    for (const u of _allUsers) {
+      try {
+        const data = await api(`/api/nodes/${id}/link/${u.id}`);
+        links.push(`${u.remark || '未命名'}\n${data.tg_link}\n`);
+      } catch (e) { /* 跳过失败的 */ }
+    }
+    if (!links.length) { toast('没有可复制的链接', 'info'); return; }
+    await navigator.clipboard.writeText(links.join('\n'));
+    toast(`已复制 ${links.length} 个链接`, 'success');
+  } catch (e) { toast('复制失败', 'error'); }
+}
+
+async function deleteNode(id, name) {
+  if (!confirm(`确定删除服务器「${name}」吗？该服务器上的代理不会自动卸载。`)) return;
+  try {
+    await api(`/api/nodes/${id}`, { method: 'DELETE' });
+    toast('已删除', 'success'); loadNodes();
+  } catch (e) { toast('删除失败', 'error'); }
+}
+
+// 切换到服务器 tab 时加载
+const _origSwitchTab = switchTab;
+switchTab = function(tab) {
+  _origSwitchTab(tab);
+  if (tab === 'nodes') loadNodes();
+};

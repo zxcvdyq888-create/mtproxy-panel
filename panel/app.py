@@ -124,6 +124,23 @@ class AdminUpdateRequest(BaseModel):
     password: str = Field(min_length=6, max_length=64)
 
 
+class NodeCreateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    host: str = Field(min_length=1, max_length=128)
+    agent_port: int = Field(default=8899, ge=1, le=65535)
+    api_token: str = Field(min_length=8, max_length=128)
+
+
+class NodeRegisterRequest(BaseModel):
+    install_token: str
+    name: str = Field(min_length=1, max_length=64)
+    host: str = Field(min_length=1, max_length=128)
+    agent_port: int = Field(default=8899, ge=1, le=65535)
+    api_token: str = Field(min_length=8, max_length=128)
+    proxy_port: int = Field(default=443, ge=1, le=65535)
+    public_ip: str = ""
+
+
 def create_token(username: str) -> str:
     payload = {"sub": username, "exp": datetime.now(timezone.utc) + timedelta(days=7)}
     return jwt.encode(payload, get_jwt_secret(), algorithm=JWT_ALGO)
@@ -254,6 +271,9 @@ def on_startup() -> None:
     _stats_stop.clear()
     _stats_thread = threading.Thread(target=_stats_collector_loop, daemon=True)
     _stats_thread.start()
+    # 节点状态轮询
+    _node_thread = threading.Thread(target=_node_poller_loop, daemon=True)
+    _node_thread.start()
 
 
 @app.on_event("shutdown")
@@ -321,6 +341,7 @@ def add_user(
     user = db.create_user(body.remark, body.traffic_limit_gb, body.expires_days)
     # 代理重启约 3 秒，放后台，不阻塞接口返回
     background_tasks.add_task(restart_proxy)
+    background_tasks.add_task(_sync_all_nodes_async)
     return user_to_response(user, db.get_all_settings(), get_online_user_ids())
 
 
@@ -352,6 +373,7 @@ def edit_user(
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
     background_tasks.add_task(restart_proxy)
+    background_tasks.add_task(_sync_all_nodes_async)
     return user_to_response(user, db.get_all_settings(), get_online_user_ids())
 
 
@@ -362,6 +384,7 @@ def remove_user(
     if not db.delete_user(user_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
     background_tasks.add_task(restart_proxy)
+    background_tasks.add_task(_sync_all_nodes_async)
     return {"status": "ok"}
 
 
@@ -469,6 +492,167 @@ def proxy_start(_: str = Depends(verify_token)) -> Dict[str, Any]:
 def proxy_stop(_: str = Depends(verify_token)) -> Dict[str, Any]:
     stop_proxy()
     return {"running": False}
+
+
+# ============ 多服务器节点管理 ============
+
+import json as _json
+import urllib.request as _urlreq
+
+
+def _node_api_call(node: Dict[str, Any], path: str, method: str = "GET",
+                   data: Optional[Dict[str, Any]] = None,
+                   timeout: int = 8) -> Optional[Dict[str, Any]]:
+    """调用节点 agent 接口，失败返回 None。"""
+    url = f"http://{node['host']}:{node['agent_port']}{path}"
+    headers = {
+        "Authorization": f"Bearer {node['api_token']}",
+        "Content-Type": "application/json",
+    }
+    body = _json.dumps(data).encode() if data is not None else None
+    req = _urlreq.Request(url, data=body, headers=headers, method=method)
+    try:
+        with _urlreq.urlopen(req, timeout=timeout) as resp:
+            return _json.loads(resp.read().decode())
+    except Exception as e:
+        logger.warning(f"节点 {node['name']}({node['host']}) 调用失败 {path}: {e}")
+        return None
+
+
+def _sync_users_to_node(node: Dict[str, Any]) -> bool:
+    """把用户列表推送到节点，返回是否成功。"""
+    users = [
+        {"secret": u["secret"], "enabled": bool(u["enabled"])}
+        for u in db.list_users()
+    ]
+    result = _node_api_call(node, "/sync-users", "POST", {"users": users})
+    return bool(result and result.get("status") == "ok")
+
+
+def _node_poller_loop() -> None:
+    """后台轮询节点状态（60 秒一次）。"""
+    while not _stats_stop.is_set():
+        try:
+            for node in db.list_nodes():
+                stats = _node_api_call(node, "/stats")
+                if stats:
+                    db.update_node_status(node["id"], "online", stats)
+                else:
+                    db.update_node_status(node["id"], "offline")
+        except Exception:
+            logger.exception("节点轮询出错")
+        _stats_stop.wait(60)
+
+
+def _sync_all_nodes_async() -> None:
+    """用户变更后异步同步到所有在线节点。"""
+    def _run():
+        for node in db.list_nodes():
+            if node["status"] == "online":
+                _sync_users_to_node(node)
+    threading.Thread(target=_run, daemon=True).start()
+
+
+@app.get("/api/nodes")
+def get_nodes(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
+    nodes = db.list_nodes()
+    # 隐藏 api_token，只返回掩码
+    for n in nodes:
+        n["api_token"] = "***" if n.get("api_token") else ""
+    return nodes
+
+
+@app.post("/api/nodes")
+def add_node(body: NodeCreateRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    node = db.create_node(
+        name=body.name, host=body.host, agent_port=body.agent_port,
+        api_token=body.api_token,
+    )
+    # 立即尝试连接并同步用户
+    stats = _node_api_call(node, "/stats")
+    if stats:
+        db.update_node_status(node["id"], "online", stats)
+        _sync_users_to_node(node)
+        node = db.get_node(node["id"])
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法连接到节点 agent，请检查 IP/端口/Token")
+    node["api_token"] = "***"
+    return node
+
+
+@app.delete("/api/nodes/{node_id}")
+def remove_node(node_id: int, _: str = Depends(verify_token)) -> Dict[str, str]:
+    if not db.delete_node(node_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "节点不存在")
+    return {"status": "ok"}
+
+
+@app.get("/api/nodes/install-command")
+def get_install_command(request: Request, _: str = Depends(verify_token)) -> Dict[str, str]:
+    """生成一键安装命令。"""
+    token = db.get_install_token()
+    # 面板公网地址：优先用配置的 public_ip，否则用请求 Host
+    public_ip = db.get_setting("public_ip", "")
+    panel_port = db.get_setting("panel_port", "8088")
+    if public_ip:
+        panel_url = f"http://{public_ip}:{panel_port}"
+    else:
+        host = request.headers.get("host", "").split(":")[0]
+        panel_url = f"http://{host}:{panel_port}"
+    cmd = (
+        f"curl -fsSL https://raw.githubusercontent.com/"
+        f"zxcvdyq888-create/mtproxy-panel/main/install-node.sh "
+        f"| bash -s -- --panel {panel_url} --token {token}"
+    )
+    return {"command": cmd, "panel_url": panel_url}
+
+
+@app.post("/api/nodes/register")
+def register_node(body: NodeRegisterRequest) -> Dict[str, Any]:
+    """节点自助注册（安装脚本调用，用 install_token 鉴权）。"""
+    if not db.verify_install_token(body.install_token):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "安装令牌无效或已过期")
+    # 同一 host 已存在则更新
+    for n in db.list_nodes():
+        if n["host"] == body.host:
+            return {"status": "ok", "node_id": n["id"], "message": "节点已存在"}
+    node = db.create_node(
+        name=body.name, host=body.host, agent_port=body.agent_port,
+        api_token=body.api_token, proxy_port=body.proxy_port,
+        public_ip=body.public_ip,
+    )
+    # 注册后立即同步用户
+    _sync_users_to_node(node)
+    return {"status": "ok", "node_id": node["id"]}
+
+
+@app.post("/api/nodes/{node_id}/sync")
+def sync_node(node_id: int, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    node = db.get_node(node_id)
+    if not node:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "节点不存在")
+    ok = _sync_users_to_node(node)
+    return {"status": "ok" if ok else "failed"}
+
+
+@app.get("/api/nodes/{node_id}/link/{user_id}")
+def get_node_user_link(node_id: int, user_id: int, _: str = Depends(verify_token)) -> Dict[str, str]:
+    """生成指定节点上指定用户的 tg 链接。"""
+    node = db.get_node(node_id)
+    if not node:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "节点不存在")
+    user = db.get_user(user_id)
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
+    settings = db.get_all_settings()
+    ip = node["public_ip"] or node["host"]
+    port = node["proxy_port"]
+    mode = settings.get("fake_tls_mode", "ee")
+    domain = settings.get("domain", "azure.microsoft.com")
+    client_secret = mode + user["secret"] if mode in ("ee", "dd") else user["secret"]
+    from mtproxy_service import build_proxy_link
+    tg_link, _ = build_proxy_link(ip, port, client_secret)
+    return {"tg_link": tg_link, "node_name": node["name"]}
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

@@ -42,6 +42,23 @@ def init_db() -> None:
             );
 
             CREATE INDEX IF NOT EXISTS idx_proxy_users_enabled ON proxy_users(enabled);
+
+            CREATE TABLE IF NOT EXISTS nodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL DEFAULT '',
+                host TEXT NOT NULL,
+                agent_port INTEGER NOT NULL DEFAULT 8899,
+                api_token TEXT NOT NULL,
+                proxy_port INTEGER NOT NULL DEFAULT 443,
+                public_ip TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'offline',
+                last_seen TEXT,
+                cpu_percent REAL NOT NULL DEFAULT 0,
+                mem_percent REAL NOT NULL DEFAULT 0,
+                proxy_running INTEGER NOT NULL DEFAULT 0,
+                node_user_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
             """
         )
         # 存量库迁移：补 last_seen 列
@@ -262,3 +279,101 @@ def ensure_default_user_from_legacy(secret: str, remark: str = "默认用户") -
             """,
             (remark, secret, _utc_now()),
         )
+
+
+# ============ 节点管理 ============
+
+def list_nodes() -> List[Dict[str, Any]]:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT * FROM nodes ORDER BY id ASC").fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_node(node_id: int) -> Optional[Dict[str, Any]]:
+    with get_conn() as conn:
+        row = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def create_node(name: str, host: str, agent_port: int, api_token: str,
+                proxy_port: int = 443, public_ip: str = "") -> Dict[str, Any]:
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO nodes
+            (name, host, agent_port, api_token, proxy_port, public_ip, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (name, host, agent_port, api_token, proxy_port, public_ip, _utc_now()),
+        )
+        node_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        return dict(row)
+
+
+def delete_node(node_id: int) -> bool:
+    with get_conn() as conn:
+        cur = conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
+        return cur.rowcount > 0
+
+
+def update_node_status(node_id: int, status: str, stats: Optional[Dict[str, Any]] = None) -> None:
+    stats = stats or {}
+    with get_conn() as conn:
+        conn.execute(
+            """
+            UPDATE nodes SET status = ?, last_seen = ?,
+                cpu_percent = ?, mem_percent = ?,
+                proxy_running = ?, node_user_count = ?
+            WHERE id = ?
+            """,
+            (
+                status,
+                _utc_now() if status == "online" else None,
+                stats.get("cpu_percent", 0),
+                stats.get("mem_percent", 0),
+                1 if stats.get("proxy_running") else 0,
+                stats.get("user_count", 0),
+                node_id,
+            ),
+        )
+
+
+def get_install_token() -> str:
+    """获取安装令牌（不存在或过期则生成新的，有效期 24 小时）。"""
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'install_token'"
+        ).fetchone()
+        exp_row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'install_token_exp'"
+        ).fetchone()
+        now_ts = datetime.now(timezone.utc).timestamp()
+        if row and exp_row and float(exp_row["value"]) > now_ts:
+            return row["value"]
+        token = secrets.token_urlsafe(24)
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('install_token', ?)",
+            (token,),
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO settings (key, value) VALUES ('install_token_exp', ?)",
+            (str(now_ts + 86400),),
+        )
+        return token
+
+
+def verify_install_token(token: str) -> bool:
+    if not token:
+        return False
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'install_token'"
+        ).fetchone()
+        exp_row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'install_token_exp'"
+        ).fetchone()
+        if not row or not exp_row:
+            return False
+        now_ts = datetime.now(timezone.utc).timestamp()
+        return secrets.compare_digest(row["value"], token) and float(exp_row["value"]) > now_ts

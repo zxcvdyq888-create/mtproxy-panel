@@ -566,3 +566,94 @@ body {
   .login-card { padding: 32px 24px 26px; }
   .metric-card .value { font-size: 26px; }
 }
+
+/* ---------- 服务器节点 ---------- */
+.node-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.node-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.node-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.node-card.node-offline {
+  opacity: 0.6;
+}
+
+.node-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.node-name {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.node-ip {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.node-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.node-stats .stat-label {
+  font-size: 11px;
+  font-weight: 400;
+  margin-bottom: 2px;
+}
+
+.node-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.code-block {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.code-block code {
+  flex: 1;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+@media (max-width: 560px) {
+  .node-grid { grid-template-columns: 1fr; }
+  .node-stats { grid-template-columns: repeat(2, 1fr); }
+}

@@ -69,6 +69,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
         安全设置
       </button>
+      <button class="nav-item" data-tab="nodes" onclick="switchTab('nodes')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01"/></svg>
+        服务器
+      </button>
     </nav>
     <div class="sidebar-footer">
       <button class="nav-item danger" onclick="logout()">
@@ -234,8 +238,39 @@
           <p class="hint-text">修改后需重新登录，请勿使用默认密码。</p>
         </div>
       </section>
+
+      <!-- 服务器管理 -->
+      <section id="tab-nodes" class="panel-section">
+        <div class="card">
+          <div class="card-header">
+            <h2>服务器</h2>
+            <div class="header-actions">
+              <span id="node-count" class="chip"></span>
+              <button class="btn btn-primary btn-sm" onclick="showAddNodeModal()">+ 添加服务器</button>
+            </div>
+          </div>
+          <p class="hint-text" style="margin-bottom:16px">主面板所在服务器为本地节点。添加更多服务器后，用户密钥会自动同步到所有在线节点，每个节点独立生成 TG 代理链接。</p>
+          <div class="node-grid" id="nodes-grid"></div>
+        </div>
+      </section>
     </div>
   </main>
+</div>
+
+<!-- 添加服务器弹窗 -->
+<div id="modal-add-node" class="modal-overlay hidden" onclick="closeModal('modal-add-node', event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>添加服务器</h3>
+      <button class="btn btn-icon" onclick="closeModal('modal-add-node')">&times;</button>
+    </div>
+    <p class="hint-text" style="margin-bottom:12px">在新服务器上以 root 执行下面这条命令，装完自动注册到本面板（令牌 24 小时有效）：</p>
+    <div class="code-block">
+      <code id="install-cmd-text"></code>
+      <button class="btn btn-ghost btn-sm" onclick="copyInstallCmd()">复制</button>
+    </div>
+    <p class="hint-text" style="margin-top:12px">需在新服务器防火墙放行 8899（agent） 和 443（代理） 端口。</p>
+  </div>
 </div>
 
 <!-- 分享弹窗 -->
