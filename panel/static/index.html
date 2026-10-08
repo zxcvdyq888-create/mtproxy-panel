@@ -332,19 +332,69 @@
   </main>
 </div>
 
-<!-- 添加服务器弹窗 -->
+<!-- 上机三步向导 -->
 <div id="modal-add-node" class="modal-overlay hidden" onclick="closeModal('modal-add-node', event)">
-  <div class="modal" onclick="event.stopPropagation()">
+  <div class="modal modal-lg" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>添加服务器</h3>
+      <h3>添加机器</h3>
       <button class="btn btn-icon" onclick="closeModal('modal-add-node')">&times;</button>
     </div>
-    <p class="hint-text" style="margin-bottom:12px">在新服务器上以 root 执行下面这条命令，装完自动注册到本面板（令牌 24 小时有效）：</p>
-    <div class="code-block">
-      <code id="install-cmd-text"></code>
-      <button class="btn btn-ghost btn-sm" onclick="copyInstallCmd()">复制</button>
+
+    <!-- 步骤条 -->
+    <div class="wizard-steps">
+      <div class="wizard-step active" id="ws-1"><span>1</span>填信息</div>
+      <div class="wizard-line"></div>
+      <div class="wizard-step" id="ws-2"><span>2</span>拿命令</div>
+      <div class="wizard-line"></div>
+      <div class="wizard-step" id="ws-3"><span>3</span>上线</div>
     </div>
-    <p class="hint-text" style="margin-top:12px">需在新服务器防火墙放行 8899（agent） 和 443（代理） 端口。</p>
+
+    <!-- 第1步 -->
+    <div id="wizard-p1">
+      <div class="form-group">
+        <label>机器名称</label>
+        <input type="text" id="node-name" placeholder="如：日本节点、香港中转">
+      </div>
+      <div class="form-group">
+        <label>分配端口范围</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="number" id="node-port-start" value="10000" min="1" max="65535" style="flex:1">
+          <span style="color:var(--text-muted)">—</span>
+          <input type="number" id="node-port-end" value="20000" min="1" max="65535" style="flex:1">
+        </div>
+        <p class="hint-text">这台机器的转发隧道只能用这个范围内的端口，端口不打架、不乱套</p>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="wizardNext()">下一步：生成安装命令</button>
+    </div>
+
+    <!-- 第2步 -->
+    <div id="wizard-p2" class="hidden">
+      <p class="hint-text" style="margin-bottom:12px">在新机器上以 <b>root</b> 执行这条命令，装完自动注册上线：</p>
+      <div class="code-block">
+        <code id="install-cmd-text"></code>
+        <button class="btn btn-ghost btn-sm" onclick="copyInstallCmd()">复制</button>
+      </div>
+      <p class="hint-text" style="margin:12px 0">需放行 8899（agent）端口；转发用的端口在上面分配的范围内按需放行。</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="wizardBack()">上一步</button>
+        <button class="btn btn-primary" style="flex:1" onclick="wizardCheck()">我已执行，去检查上线状态</button>
+      </div>
+    </div>
+
+    <!-- 第3步 -->
+    <div id="wizard-p3" class="hidden">
+      <div id="wizard-online-ok" class="hidden">
+        <div class="wizard-success">✅ 机器已上线！</div>
+        <p class="hint-text" id="wizard-online-info"></p>
+        <button class="btn btn-primary btn-block" onclick="closeModal('modal-add-node');refreshNodes();">完成，去建隧道</button>
+      </div>
+      <div id="wizard-online-wait">
+        <div class="wizard-loading">⏳ 等待机器上线…</div>
+        <p class="hint-text">机器执行完安装命令后会自动注册，一般 1 分钟内上线。</p>
+        <button class="btn btn-ghost btn-block" onclick="wizardCheck()">再检查一次</button>
+        <button class="btn btn-ghost btn-block" onclick="wizardBack2()">返回复制命令</button>
+      </div>
+    </div>
   </div>
 </div>
 

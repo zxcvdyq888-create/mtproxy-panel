@@ -179,6 +179,8 @@ class NodeCreateRequest(BaseModel):
     host: str = Field(min_length=1, max_length=128)
     agent_port: int = Field(default=8899, ge=1, le=65535)
     api_token: str = Field(min_length=8, max_length=128)
+    port_start: int = Field(default=10000, ge=1, le=65535)
+    port_end: int = Field(default=20000, ge=1, le=65535)
 
 
 class NodeRegisterRequest(BaseModel):
@@ -189,6 +191,8 @@ class NodeRegisterRequest(BaseModel):
     api_token: str = Field(min_length=8, max_length=128)
     proxy_port: int = Field(default=443, ge=1, le=65535)
     public_ip: str = ""
+    port_start: int = Field(default=10000, ge=1, le=65535)
+    port_end: int = Field(default=20000, ge=1, le=65535)
 
 
 class NodeUpdateRequest(BaseModel):
@@ -663,9 +667,12 @@ def get_nodes(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
 
 @app.post("/api/nodes")
 def add_node(body: NodeCreateRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    if body.port_start >= body.port_end:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "端口范围起始必须小于结束")
     node = db.create_node(
         name=body.name, host=body.host, agent_port=body.agent_port,
         api_token=body.api_token,
+        port_start=body.port_start, port_end=body.port_end,
     )
     # 立即尝试连接并同步用户
     stats = _node_api_call(node, "/stats")
@@ -753,6 +760,22 @@ def list_forward_rules(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
 
 @app.post("/api/forward/rules")
 def create_forward_rule(body: ForwardRuleRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
+    # 端口范围与冲突检查
+    if body.listen_node_id != 0:
+        node = db.get_node(body.listen_node_id)
+        if not node:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "监听机器不存在")
+        ps, pe = node.get("port_start", 10000), node.get("port_end", 20000)
+        if not (ps <= body.listen_port <= pe):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"监听端口 {body.listen_port} 不在该机器分配范围 {ps}-{pe} 内")
+        for r in db.list_forward_rules():
+            if r["listen_node_id"] == body.listen_node_id and r["listen_port"] == body.listen_port:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"端口 {body.listen_port} 在该机器上已被隧道「{r['name']}」占用")
+
     if not body.listen_port or not body.target_host or not body.target_port:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "监听端口、目标地址、目标端口必填")
     if body.listen_node_id != 0 and not db.get_node(body.listen_node_id):
@@ -895,6 +918,7 @@ def register_node(body: NodeRegisterRequest) -> Dict[str, Any]:
         name=body.name, host=body.host, agent_port=body.agent_port,
         api_token=body.api_token, proxy_port=body.proxy_port,
         public_ip=body.public_ip,
+        port_start=body.port_start, port_end=body.port_end,
     )
     # 注册后立即同步用户
     _sync_users_to_node(node)

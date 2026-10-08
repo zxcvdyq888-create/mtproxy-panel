@@ -1258,3 +1258,51 @@ input:focus, select:focus {
 }
 .fw-preview-label { color: var(--text-muted); font-size: 0.8rem; }
 #fw-preview-text { font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+/* ============ 上机向导 ============ */
+.wizard-steps {
+  display: flex;
+  align-items: center;
+  margin: 4px 0 18px;
+}
+.wizard-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.wizard-step span {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem; font-weight: 800;
+}
+.wizard-step.active { color: var(--accent); }
+.wizard-step.active span {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.wizard-line {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin: 0 10px;
+  border-radius: 2px;
+}
+.wizard-success {
+  font-size: 1.3rem;
+  font-weight: 800;
+  text-align: center;
+  margin: 20px 0 10px;
+}
+.wizard-loading {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+  margin: 20px 0 10px;
+}

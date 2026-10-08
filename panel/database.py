@@ -58,6 +58,8 @@ def init_db() -> None:
                 mem_percent REAL NOT NULL DEFAULT 0,
                 proxy_running INTEGER NOT NULL DEFAULT 0,
                 node_user_count INTEGER NOT NULL DEFAULT 0,
+                port_start INTEGER NOT NULL DEFAULT 10000,
+                port_end INTEGER NOT NULL DEFAULT 20000,
                 created_at TEXT NOT NULL
             );
             """
@@ -91,6 +93,15 @@ def init_db() -> None:
             );
             """
         )
+        # 节点表补端口范围
+        for _col, _def in [
+            ("port_start", "INTEGER NOT NULL DEFAULT 10000"),
+            ("port_end", "INTEGER NOT NULL DEFAULT 20000"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE nodes ADD COLUMN {_col} {_def}")
+            except sqlite3.OperationalError:
+                pass
         # 转发表补新字段（隧道化升级）
         for _col, _def in [
             ("protocol", "TEXT NOT NULL DEFAULT 'tcp'"),
@@ -350,15 +361,18 @@ def get_node(node_id: int) -> Optional[Dict[str, Any]]:
 
 
 def create_node(name: str, host: str, agent_port: int, api_token: str,
-                proxy_port: int = 443, public_ip: str = "") -> Dict[str, Any]:
+                proxy_port: int = 443, public_ip: str = "",
+                port_start: int = 10000, port_end: int = 20000) -> Dict[str, Any]:
     with get_conn() as conn:
         cur = conn.execute(
             """
             INSERT INTO nodes
-            (name, host, agent_port, api_token, proxy_port, public_ip, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (name, host, agent_port, api_token, proxy_port, public_ip,
+             port_start, port_end, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, host, agent_port, api_token, proxy_port, public_ip, _utc_now()),
+            (name, host, agent_port, api_token, proxy_port, public_ip,
+             port_start, port_end, _utc_now()),
         )
         node_id = cur.lastrowid
         row = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()

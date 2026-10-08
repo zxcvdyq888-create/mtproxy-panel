@@ -643,12 +643,52 @@ function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-async function showAddNodeModal() {
+// 上机三步向导
+let _wizardNodeName = '', _wizardPortStart = 10000, _wizardPortEnd = 20000;
+function showAddNodeModal() {
+  _wizardStep(1);
+  document.getElementById('node-name').value = '';
+  document.getElementById('node-port-start').value = 10000;
+  document.getElementById('node-port-end').value = 20000;
+  show(document.getElementById('modal-add-node'));
+}
+function _wizardStep(n) {
+  [1,2,3].forEach(i => {
+    document.getElementById('ws-'+i).classList.toggle('active', i <= n);
+    document.getElementById('wizard-p'+i).classList.toggle('hidden', i !== n);
+  });
+}
+async function wizardNext() {
+  const name = document.getElementById('node-name').value.trim();
+  const ps = parseInt(document.getElementById('node-port-start').value) || 10000;
+  const pe = parseInt(document.getElementById('node-port-end').value) || 20000;
+  if (!name) { toast('请填写机器名称', 'error'); return; }
+  if (ps >= pe) { toast('端口范围起始必须小于结束', 'error'); return; }
+  _wizardNodeName = name; _wizardPortStart = ps; _wizardPortEnd = pe;
   try {
     const data = await api('/api/nodes/install-command');
-    document.getElementById('install-cmd-text').textContent = data.command;
-    show(document.getElementById('modal-add-node'));
+    // 把节点信息拼进安装命令
+    const cmd = data.command + ` --name "${name}" --port-range "${ps}-${pe}"`;
+    document.getElementById('install-cmd-text').textContent = cmd;
+    _wizardStep(2);
   } catch (e) { toast('获取安装命令失败', 'error'); }
+}
+function wizardBack() { _wizardStep(1); }
+function wizardBack2() { _wizardStep(2); }
+async function wizardCheck() {
+  _wizardStep(3);
+  document.getElementById('wizard-online-ok').classList.add('hidden');
+  document.getElementById('wizard-online-wait').classList.remove('hidden');
+  try {
+    const nodes = await api('/api/nodes');
+    const found = nodes.find(n => n.name === _wizardNodeName && n.status === 'online');
+    if (found) {
+      document.getElementById('wizard-online-info').textContent =
+        `${found.name}（${found.public_ip || found.host}）在线，端口范围 ${_wizardPortStart}-${_wizardPortEnd}`;
+      document.getElementById('wizard-online-wait').classList.add('hidden');
+      document.getElementById('wizard-online-ok').classList.remove('hidden');
+    }
+  } catch (e) { /* 等待中 */ }
 }
 
 function copyInstallCmd() {
@@ -841,8 +881,10 @@ async function showAddForwardModal() {
   ]);
   _fwNodesCache = nodes;
   const sel = document.getElementById('fw-node');
+  const nodeLabel = n => `${esc(n.name)} (${esc(n.host)}) [${n.port_start||10000}-${n.port_end||20000}]`;
   sel.innerHTML = '<option value="0">本机</option>' +
-    nodes.map(n => `<option value="${n.id}">${esc(n.name)} (${esc(n.host)})</option>`).join('');
+    nodes.map(n => `<option value="${n.id}">${nodeLabel(n)}</option>`).join('');
+  sel.onchange = updateFwPreview;
   const tsel = document.getElementById('fw-target-node');
   tsel.innerHTML = '<option value="">手动填 IP / 域名</option>' +
     nodes.map(n => `<option value="${n.id}">${esc(n.name)} (${esc(n.host)})</option>`).join('');
@@ -871,12 +913,20 @@ async function showAddForwardModal() {
 
 function updateFwPreview() {
   const nodeSel = document.getElementById('fw-node');
+  const nid = parseInt(nodeSel.value) || 0;
   const nodeName = nodeSel.options[nodeSel.selectedIndex]?.text?.split(' (')[0] || '本机';
   const lp = document.getElementById('fw-listen-port').value || '?';
   const th = document.getElementById('fw-target-host').value || '?';
   const tp = document.getElementById('fw-target-port').value || '?';
+  let hint = '';
+  if (nid) {
+    const n = _fwNodesCache.find(x => x.id === nid);
+    const ps = n?.port_start || 10000, pe = n?.port_end || 20000;
+    const lpNum = parseInt(lp);
+    if (lp !== '?' && (lpNum < ps || lpNum > pe)) hint = ` ⚠️ 端口须在 ${ps}-${pe} 范围内`;
+  }
   document.getElementById('fw-preview-text').textContent =
-    `${nodeName}:${lp}  →  ${th}:${tp}`;
+    `${nodeName}:${lp}  →  ${th}:${tp}${hint}`;
 }
 
 async function saveForwardRule() {

@@ -23,22 +23,26 @@ AGENT_PORT="8899"
 PANEL_URL=""
 INSTALL_TOKEN=""
 NODE_NAME=""
+PORT_RANGE="10000-20000"
 
 # 支持两种写法：
 #   bash install-node.sh <面板地址> <安装令牌> [节点名称]
 #   bash install-node.sh --panel <面板地址> --token <安装令牌> [--name 名称]
+# 兼容位置参数和 flag 混用：先取位置参数，再解析 flag
 if [[ "${1:-}" != "" && "${1:-}" != --* ]]; then
-  PANEL_URL="$1"; INSTALL_TOKEN="${2:-}"; NODE_NAME="${3:-}"
-else
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --panel) PANEL_URL="$2"; shift 2 ;;
-      --token) INSTALL_TOKEN="$2"; shift 2 ;;
-      --name) NODE_NAME="$2"; shift 2 ;;
-      *) echo "未知参数: $1"; exit 1 ;;
-    esac
-  done
+  PANEL_URL="$1"; shift
+  if [[ "${1:-}" != "" && "${1:-}" != --* ]]; then INSTALL_TOKEN="$1"; shift; fi
+  if [[ "${1:-}" != "" && "${1:-}" != --* ]]; then NODE_NAME="$1"; shift; fi
 fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --panel) PANEL_URL="$2"; shift 2 ;;
+    --token) INSTALL_TOKEN="$2"; shift 2 ;;
+    --name) NODE_NAME="$2"; shift 2 ;;
+    --port-range) PORT_RANGE="$2"; shift 2 ;;
+    *) echo "未知参数: $1"; exit 1 ;;
+  esac
+done
 
 # 缺参数则交互式输入
 if [[ -z "$PANEL_URL" ]]; then
@@ -153,6 +157,8 @@ print(json.dumps({
   'api_token': '''$API_TOKEN''',
   'proxy_port': $PROXY_PORT,
   'public_ip': '''$PUBLIC_IP''',
+  'port_start': $(echo "$PORT_RANGE" | cut -d- -f1),
+  'port_end': $(echo "$PORT_RANGE" | cut -d- -f2),
 }))
 ")
 REG_RESP=$(curl -fsSL --max-time 15 -X POST "${PANEL_URL}/api/nodes/register" \
