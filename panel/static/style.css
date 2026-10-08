@@ -657,3 +657,11 @@ body {
   .node-grid { grid-template-columns: 1fr; }
   .node-stats { grid-template-columns: repeat(2, 1fr); }
 }
+
+.version-tag {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 8px 0 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
