@@ -37,12 +37,18 @@ def init_db() -> None:
                 upload_bytes INTEGER NOT NULL DEFAULT 0,
                 download_bytes INTEGER NOT NULL DEFAULT 0,
                 expires_at TEXT,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                last_seen TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_proxy_users_enabled ON proxy_users(enabled);
             """
         )
+        # 存量库迁移：补 last_seen 列
+        try:
+            conn.execute("ALTER TABLE proxy_users ADD COLUMN last_seen TEXT")
+        except sqlite3.OperationalError:
+            pass  # 列已存在
 
         defaults = {
             "panel_port": "8088",
@@ -199,15 +205,17 @@ def delete_user(user_id: int) -> bool:
 
 
 def add_traffic(user_id: int, upload: int, download: int) -> None:
+    """累加流量；有流量增量即视为活跃，更新最后在线时间。"""
     with get_conn() as conn:
         conn.execute(
             """
             UPDATE proxy_users
             SET upload_bytes = upload_bytes + ?,
-                download_bytes = download_bytes + ?
+                download_bytes = download_bytes + ?,
+                last_seen = ?
             WHERE id = ?
             """,
-            (upload, download, user_id),
+            (upload, download, _utc_now(), user_id),
         )
 
 

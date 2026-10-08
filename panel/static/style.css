@@ -507,6 +507,39 @@ body {
   color: var(--text-secondary);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 13px;
+  width: 160px;
+  outline: none;
+  transition: border-color 0.2s, width 0.2s;
+}
+
+.search-input:focus {
+  border-color: var(--primary);
+  width: 200px;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.btn-sm {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
 /* ---------- 响应式 ---------- */
 @media (max-width: 900px) {
   .sidebar {

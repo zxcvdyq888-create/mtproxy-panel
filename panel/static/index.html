@@ -140,7 +140,11 @@
         <div class="card">
           <div class="card-header">
             <h2>用户列表</h2>
-            <span id="user-count" class="chip"></span>
+            <div class="header-actions">
+              <span id="user-count" class="chip"></span>
+              <input type="text" id="user-search" class="search-input" placeholder="搜索备注..." oninput="filterUsers()">
+              <button class="btn btn-ghost btn-sm" onclick="exportUsers()" title="导出全部用户链接">导出</button>
+            </div>
           </div>
           <!-- 桌面端表格 -->
           <div class="table-desktop">
@@ -151,6 +155,7 @@
                   <th>状态</th>
                   <th>流量</th>
                   <th>到期</th>
+                  <th>最后在线</th>
                   <th>操作</th>
                 </tr>
               </thead>

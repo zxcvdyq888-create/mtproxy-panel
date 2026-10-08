@@ -210,6 +210,7 @@ def user_to_response(
         "expired": expired,
         "over_quota": over_quota,
         "created_at": user["created_at"],
+        "last_seen": user.get("last_seen"),
         "tg_link": tg_link,
         "http_link": http_link,
     }

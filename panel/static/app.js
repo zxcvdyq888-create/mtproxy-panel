@@ -238,7 +238,42 @@ function formatExpiry(exp) {
   return new Date(exp).toLocaleDateString('zh-CN');
 }
 
-function renderUsers(users) {
+function formatLastSeen(ts) {
+  if (!ts) return '<span style="color:var(--text-muted)">从未</span>';
+  const diff = Date.now() - new Date(ts).getTime();
+  if (diff < 0) return '刚刚';
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return '刚刚';
+  if (m < 60) return m + ' 分钟前';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + ' 小时前';
+  const d = Math.floor(h / 24);
+  if (d < 30) return d + ' 天前';
+  return new Date(ts).toLocaleDateString('zh-CN');
+}
+
+let _allUsers = [];
+
+function filterUsers() {
+  const q = document.getElementById('user-search').value.trim().toLowerCase();
+  const filtered = q ? _allUsers.filter(u => (u.remark || '').toLowerCase().includes(q)) : _allUsers;
+  renderUsers(filtered, false);
+}
+
+function exportUsers() {
+  if (!_allUsers.length) { toast('没有用户可导出', 'info'); return; }
+  const lines = _allUsers.map(u => (u.remark || '未命名') + '\n' + u.tg_link + '\n');
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'mtproxy-users.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已导出 ' + _allUsers.length + ' 个用户链接', 'success');
+}
+
+function renderUsers(users, save = true) {
+  if (save) _allUsers = users;
   const tbody = document.getElementById('users-tbody');
   const cards = document.getElementById('users-cards');
   if (!users.length) {
@@ -254,6 +289,7 @@ function renderUsers(users) {
       <td>${statusBadge(u)}</td>
       <td>${trafficHtml(u)}<div style="font-size:0.72rem;color:var(--text-muted);margin-top:4px">↑${u.upload_human} ↓${u.download_human}</div></td>
       <td>${formatExpiry(u.expires_at)}</td>
+      <td>${formatLastSeen(u.last_seen)}</td>
       <td>${actionButtons(u)}</td>
     </tr>
   `).join('');
@@ -272,6 +308,7 @@ function renderUsers(users) {
         <div><div class="stat-label">配额</div>${u.traffic_limit_gb > 0 ? u.traffic_limit_gb + ' GB' : '不限'}</div>
         <div><div class="stat-label">上行</div>${u.upload_human}</div>
         <div><div class="stat-label">到期</div>${u.expires_at ? new Date(u.expires_at).toLocaleDateString('zh-CN') : '永久'}</div>
+        <div><div class="stat-label">最后在线</div>${formatLastSeen(u.last_seen)}</div>
       </div>
       ${u.traffic_limit_gb > 0 ? trafficHtml(u) : ''}
       <div class="user-card-actions">
