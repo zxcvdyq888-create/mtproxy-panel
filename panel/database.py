@@ -465,13 +465,14 @@ def verify_install_token(token: str) -> bool:
 
 
 def update_node(node_id: int, **fields: Any) -> Optional[Dict[str, Any]]:
-    allowed = {"name", "proxy_port", "public_ip", "domain"}
+    allowed = {"name", "proxy_port", "public_ip", "domain", "host", "port_start", "port_end"}
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return get_node(node_id)
     # nodes 表没有 domain 列，存到 public_ip 同级的扩展字段——这里用内存+推送，持久化到 settings 风格的 node_meta 表
-    cols = ", ".join(f"{k} = ?" for k in updates if k in ("name", "proxy_port", "public_ip"))
-    values = [v for k, v in updates.items() if k in ("name", "proxy_port", "public_ip")]
+    db_cols = ("name", "proxy_port", "public_ip", "host", "port_start", "port_end")
+    cols = ", ".join(f"{k} = ?" for k in updates if k in db_cols)
+    values = [v for k, v in updates.items() if k in db_cols]
     with get_conn() as conn:
         if cols:
             conn.execute(f"UPDATE nodes SET {cols} WHERE id = ?", values + [node_id])

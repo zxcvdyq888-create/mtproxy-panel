@@ -365,18 +365,25 @@
         <span style="color:var(--text-muted)">—</span>
         <input type="number" id="node-port-end" value="20000" min="1" max="65535" style="flex:1">
       </div>
+      <p class="hint-text">这台机器的转发只能用此范围内的端口</p>
     </div>
-    <div id="node-cmd-box" class="hidden">
-      <div class="form-group">
-        <label>在新机器上以 root 执行：</label>
-        <div class="code-block">
-          <code id="install-cmd-text"></code>
-          <button class="btn btn-ghost btn-sm" onclick="copyInstallCmd()">复制</button>
-        </div>
-      </div>
-      <p class="hint-text">执行完机器会自动上线，端口范围内的端口按需放行。</p>
+    <button class="btn btn-primary btn-block" onclick="saveNode()">创建</button>
+    <p class="hint-text" style="margin-top:10px">创建后点机器卡片上的「安装」获取专属安装命令</p>
+  </div>
+</div>
+
+<!-- 节点安装命令 -->
+<div id="modal-node-install" class="modal-overlay hidden" onclick="closeModal('modal-node-install', event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>安装命令</h3>
+      <button class="btn btn-icon" onclick="closeModal('modal-node-install')">&times;</button>
     </div>
-    <button class="btn btn-primary btn-block" id="node-gen-btn" onclick="genNodeCmd()">生成安装命令</button>
+    <p class="hint-text" style="margin-bottom:12px">在新机器上以 <b>root</b> 执行，装完自动上线：</p>
+    <div class="code-block">
+      <code id="node-install-cmd"></code>
+      <button class="btn btn-ghost btn-sm" onclick="copyText(document.getElementById('node-install-cmd').textContent).then(()=>toast('已复制','success'))">复制</button>
+    </div>
   </div>
 </div>
 

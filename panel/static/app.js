@@ -616,6 +616,7 @@ function renderNodes() {
         <div>
           <div class="node-name">${escapeHtml(n.name)}</div>
           <div class="node-ip">${escapeHtml(n.public_ip || n.host)} : ${n.proxy_port}</div>
+          <div class="node-ports">端口 ${n.port_start || 10000}-${n.port_end || 20000}</div>
         </div>
         <span class="badge ${online ? 'success' : 'danger'}">${online ? '在线' : '离线'}</span>
       </div>
@@ -626,8 +627,7 @@ function renderNodes() {
         <div><div class="stat-label">最后在线</div>${lastSeen}</div>
       </div>
       <div class="node-card-actions">
-        <button class="btn btn-ghost btn-sm" onclick="syncNode(${n.id})" ${online ? '' : 'disabled'}>同步用户</button>
-        <button class="btn btn-ghost btn-sm" onclick="copyNodeLinks(${n.id})" ${online ? '' : 'disabled'}>复制链接</button>
+        ${online ? '' : `<button class="btn btn-primary btn-sm" onclick="showNodeInstall(${n.id})">安装</button>`}
         <button class="btn btn-ghost btn-sm" onclick="showEditNodeModal(${n.id})">编辑</button>
         <button class="btn btn-danger btn-sm" onclick="deleteNode(${n.id}, '${escapeHtml(n.name)}')">删除</button>
       </div>
@@ -644,27 +644,34 @@ function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// 添加机器：极简
+// 添加机器：先建节点，卡片上点"安装"拿专属命令
 function showAddNodeModal() {
   document.getElementById('node-name').value = '';
   document.getElementById('node-port-start').value = 10000;
   document.getElementById('node-port-end').value = 20000;
-  document.getElementById('node-cmd-box').classList.add('hidden');
-  document.getElementById('node-gen-btn').classList.remove('hidden');
   show(document.getElementById('modal-add-node'));
 }
-async function genNodeCmd() {
-  const name = document.getElementById('node-name').value.trim();
-  const ps = parseInt(document.getElementById('node-port-start').value) || 10000;
-  const pe = parseInt(document.getElementById('node-port-end').value) || 20000;
-  if (!name) { toast('请填写机器名称', 'error'); return; }
-  if (ps >= pe) { toast('起始端口须小于结束端口', 'error'); return; }
+async function saveNode() {
+  const body = {
+    name: document.getElementById('node-name').value.trim(),
+    host: document.getElementById('node-name').value.trim(),
+    port_start: parseInt(document.getElementById('node-port-start').value) || 10000,
+    port_end: parseInt(document.getElementById('node-port-end').value) || 20000,
+  };
+  if (!body.name) { toast('请填写机器名称', 'error'); return; }
+  if (body.port_start >= body.port_end) { toast('起始端口须小于结束端口', 'error'); return; }
   try {
-    const data = await api('/api/nodes/install-command');
-    document.getElementById('install-cmd-text').textContent =
-      data.command + ` --name "${name}" --port-range "${ps}-${pe}"`;
-    document.getElementById('node-cmd-box').classList.remove('hidden');
-    document.getElementById('node-gen-btn').classList.add('hidden');
+    await api('/api/nodes', {method: 'POST', body: JSON.stringify(body)});
+    closeModal('modal-add-node');
+    toast('节点已创建，点卡片上的「安装」获取安装命令', 'success');
+    loadNodes();
+  } catch (e) { toast('创建失败: ' + e.message, 'error'); }
+}
+async function showNodeInstall(id) {
+  try {
+    const data = await api(`/api/nodes/${id}/install-command`);
+    document.getElementById('node-install-cmd').textContent = data.command;
+    show(document.getElementById('modal-node-install'));
   } catch (e) { toast('获取安装命令失败', 'error'); }
 }
 function copyInstallCmd() {

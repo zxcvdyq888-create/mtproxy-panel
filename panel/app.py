@@ -178,7 +178,7 @@ class NodeCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     host: str = Field(min_length=1, max_length=128)
     agent_port: int = Field(default=8899, ge=1, le=65535)
-    api_token: str = Field(min_length=8, max_length=128)
+    api_token: str = Field(default="", max_length=128)
     port_start: int = Field(default=10000, ge=1, le=65535)
     port_end: int = Field(default=20000, ge=1, le=65535)
 
@@ -669,19 +669,22 @@ def get_nodes(_: str = Depends(verify_token)) -> List[Dict[str, Any]]:
 def add_node(body: NodeCreateRequest, _: str = Depends(verify_token)) -> Dict[str, Any]:
     if body.port_start >= body.port_end:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "端口范围起始必须小于结束")
+    import secrets
+    api_token = body.api_token or secrets.token_urlsafe(24)
     node = db.create_node(
         name=body.name, host=body.host, agent_port=body.agent_port,
-        api_token=body.api_token,
+        api_token=api_token,
         port_start=body.port_start, port_end=body.port_end,
     )
-    # 立即尝试连接并同步用户
-    stats = _node_api_call(node, "/stats")
-    if stats:
-        db.update_node_status(node["id"], "online", stats)
-        _sync_users_to_node(node)
-        node = db.get_node(node["id"])
-    else:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "无法连接到节点 agent，请检查 IP/端口/Token")
+    # 尝试连接，能连上就标记在线（连不上也正常建，装完 agent 会自动上线）
+    try:
+        stats = _node_api_call(node, "/stats")
+        if stats:
+            db.update_node_status(node["id"], "online", stats)
+            _sync_users_to_node(node)
+            node = db.get_node(node["id"])
+    except Exception:
+        pass
     node["api_token"] = "***"
     return node
 
@@ -937,15 +940,42 @@ def get_install_command(request: Request, _: str = Depends(verify_token)) -> Dic
     return {"command": cmd, "panel_url": panel_url}
 
 
+@app.get("/api/nodes/{node_id}/install-command")
+def node_install_command(node_id: int, request: Request, _: str = Depends(verify_token)) -> Dict[str, str]:
+    """该节点的专属安装命令。"""
+    node = db.get_node(node_id)
+    if not node:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "节点不存在")
+    token = db.get_install_token()
+    public_ip = db.get_setting("public_ip", "")
+    panel_port = db.get_setting("panel_port", "8088")
+    if public_ip:
+        panel_url = f"http://{public_ip}:{panel_port}"
+    else:
+        host = request.headers.get("host", "").split(":")[0]
+        panel_url = f"http://{host}:{panel_port}"
+    ps = node.get("port_start", 10000)
+    pe = node.get("port_end", 20000)
+    cmd = (
+        f"curl -fsSL https://raw.githubusercontent.com/"
+        f"zxcvdyq888-create/mtproxy-panel/main/install-node.sh "
+        f"| bash -s -- {panel_url} {token} "
+        f"--name \"{node['name']}\" --port-range \"{ps}-{pe}\""
+    )
+    return {"command": cmd}
+
+
 @app.post("/api/nodes/register")
 def register_node(body: NodeRegisterRequest) -> Dict[str, Any]:
     """节点自助注册（安装脚本调用，用 install_token 鉴权）。"""
     if not db.verify_install_token(body.install_token):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "安装令牌无效或已过期")
-    # 同一 host 已存在则更新
+    # 同一 host 或同名已存在则更新（支持先建后装：面板先建节点，机器后安装）
     for n in db.list_nodes():
-        if n["host"] == body.host:
-            return {"status": "ok", "node_id": n["id"], "message": "节点已存在"}
+        if n["host"] == body.host or n["name"] == body.name:
+            db.update_node(n["id"], {"host": body.host, "public_ip": body.public_ip,
+                                     "port_start": body.port_start, "port_end": body.port_end})
+            return {"status": "ok", "node_id": n["id"], "message": "节点已上线"}
     node = db.create_node(
         name=body.name, host=body.host, agent_port=body.agent_port,
         api_token=body.api_token, proxy_port=body.proxy_port,
